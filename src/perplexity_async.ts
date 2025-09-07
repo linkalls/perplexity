@@ -7,7 +7,7 @@ export class PerplexityAsyncClient {
     // no heavy init in constructor
   }
 
-  async init(){
+  async init(): Promise<this>{
     // Create underlying client
     const mod = await import('./perplexity');
     this.client = new mod.PerplexityClient(this.cookies);
@@ -19,12 +19,12 @@ export class PerplexityAsyncClient {
   }
 
   // convenience factory to mimic `await Client(cookies)` style
-  static async create(cookies: Record<string,string> = {}){
+  static async create(cookies: Record<string,string> = {}): Promise<PerplexityAsyncClient>{
     const c = new PerplexityAsyncClient(cookies);
     return await c.init();
   }
 
-  async search(...args: Parameters<_PC['search']>) {
+  async search(...args: Parameters<_PC['search']>): Promise<any>{
     // @ts-ignore
     return await this.client.search(...args);
   }

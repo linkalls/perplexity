@@ -359,7 +359,7 @@ export class PerplexityClient {
   }
 
   // add createAccount method
-  async createAccount(emailnatorCookies: Record<string,string>){
+  async createAccount(emailnatorCookies: Record<string,string>): Promise<boolean>{
     // minimal account creation flow using Emailnator
     const Emailnator = (await import('./emailnator')).default as any;
     const en = new Emailnator(emailnatorCookies);

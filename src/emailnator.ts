@@ -41,7 +41,7 @@ export class Emailnator {
   }
 
   // generate a new email address 
-  async initGenerate(domain=false, plus=false, dot=false, google_mail=true){
+  async initGenerate(domain=false, plus=false, dot=false, google_mail=true): Promise<string>{
     const data: any = { email: [] };
     if (domain) data.email.push('domain');
     if (plus) data.email.push('plusGmail');
@@ -69,7 +69,7 @@ export class Emailnator {
   }
 
   // reload messages; if wait_for provided, will poll until condition met or timeout
-  async reload(options: { wait?: boolean; retry?: number; timeout?: number; wait_for?: ((m:any)=>boolean) } = {}){
+  async reload(options: { wait?: boolean; retry?: number; timeout?: number; wait_for?: ((m:any)=>boolean) } = {}): Promise<any[] | undefined>{
     const wait = options.wait ?? false;
     const retry = options.retry ?? 5;
     const timeout = options.timeout ?? 30;
@@ -102,12 +102,12 @@ export class Emailnator {
     return new_msgs;
   }
 
-  async open(msg_id: string){
+  async open(msg_id: string): Promise<string>{
     const res = await fetch('https://www.emailnator.com/message-list', { method: 'POST', headers: this.headers, body: JSON.stringify({ email: this.email, messageID: msg_id }) });
     return await res.text();
   }
 
-  get(func: (m:any)=>boolean, msgs?: any[]){
+  get(func: (m:any)=>boolean, msgs?: any[]): any | undefined{
     const target = msgs ?? this.inbox;
     for (const m of target) if (func(m)) return m;
     return undefined;

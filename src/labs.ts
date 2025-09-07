@@ -13,7 +13,7 @@ export class LabsClient {
     this.timestamp = Math.floor(Math.random()*0xffffffff).toString(16).padStart(8, '0');
   }
 
-  async init(){
+  async init(): Promise<this>{
     // polling to get sid 
     const resp = await fetch(`${this.base}/socket.io/?EIO=4&transport=polling&t=${this.timestamp}`);
     const text = await resp.text();
@@ -62,7 +62,7 @@ export class LabsClient {
     return this;
   }
 
-  async ask(query: string, model = 'r1-1776', stream = false){
+  async ask(query: string, model = 'r1-1776', stream = false): Promise<any | AsyncGenerator<any, void, void>>{
     if (!this.ws) throw new Error('not initialized');
     if (!['r1-1776','sonar-pro','sonar','sonar-reasoning-pro','sonar-reasoning'].includes(model)) throw new Error('invalid model');
 
