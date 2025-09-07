@@ -1,5 +1,5 @@
 {
-  "name": "@linkalls/perplexity",
+  "name": "@potetotown/perplexity",
   "version": "0.1.0",
   "type": "module",
   "description": "Lightweight Perplexity.ai client (TypeScript source)",
