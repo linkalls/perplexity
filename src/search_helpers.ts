@@ -1,12 +1,12 @@
 // Shared helpers extracted from perplexity client to keep implementation small
 import type { PerplexityChunk,Models } from './types';
 
-export function cryptoRandomUuid() {
+export function cryptoRandomUuid(): string {
   if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') return (crypto as any).randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { const r = Math.random()*16|0; const v = c==='x'?r:(r&0x3|0x8); return v.toString(16); });
 }
 
-export function ensureSearchArgs(self: any, mode: string, sources: Array<string>, files: Record<string, any>) {
+export function ensureSearchArgs(self: any, mode: string, sources: Array<string>, files: Record<string, any>): void {
   if (!['auto','pro','reasoning','deep research'].includes(mode)) throw new Error('Invalid search mode.');
   if (!sources.every((s: string)=>['web','scholar','social'].includes(s))) throw new Error('Invalid sources.');
   if ((mode === 'pro' || mode === 'reasoning' || mode === 'deep research') && self.copilot <= 0) throw new Error('No remaining pro queries.');
@@ -127,7 +127,7 @@ export function computeModelPreference(mode: string, model: Models | null): stri
   return byMode['__default'];
 }
 
-export function buildSearchJsonBody(self: any, query: string, mode: string, model: Models | null, uploaded_files: string[], follow_up: any, incognito: boolean, language: string, sources: Array<string>) {
+export function buildSearchJsonBody(self: any, query: string, mode: string, model: Models | null, uploaded_files: string[], follow_up: any, incognito: boolean, language: string, sources: Array<string>): any {
   const model_preference = computeModelPreference(mode, model);
   return {
     query_str: query,
