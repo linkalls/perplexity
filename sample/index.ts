@@ -1,9 +1,11 @@
 import { PerplexityClient } from '../src/perplexity';
 import type { PerplexityResponse, Block } from '../src/types';
 import { isAskTextBlock, isWebResultsBlock, isPlanBlock, isProSearchStepsBlock} from '../src/types';
+import { parseCookieEnv } from '../src/search_helpers';
 
 async function main() {
-  const cli = new PerplexityClient();
+  const parsedCookies = parseCookieEnv(process.env.PERPLEXITY_COOKIE);
+  const cli = new PerplexityClient(parsedCookies);
 
   try {
     // non-streaming search: returns final aggregated response

@@ -127,6 +127,55 @@ export function computeModelPreference(mode: string, model: Models | null): stri
   return byMode['__default'];
 }
 
+/**
+ * Parse a PERPLEXITY_COOKIE-like environment value into a Record<string,string>.
+ * Supports:
+ * - JSON object string: '{"k":"v",...}'
+ * - JSON wrapper: '{"cookie":"k=v; k2=v2"}'
+ * - header-style string: 'k=v; k2=v2'
+ * - python-style single-quoted object: "{'cookie': 'k=v; ...'}"
+ */
+export function parseCookieEnv(raw: string | undefined): Record<string,string> {
+  const out: Record<string,string> = {};
+  const s = (raw ?? '').trim();
+  if (!s) return out;
+
+  const tryHeaderParse = (hdr: string) => Object.fromEntries(
+    hdr.split(';').map(p => p.trim()).filter(Boolean).map(p => {
+      const i = p.indexOf('=');
+      if (i === -1) return [p, ''];
+      return [p.slice(0, i), p.slice(i + 1)];
+    })
+  );
+
+  try {
+    const j = JSON.parse(s);
+    if (j && typeof j === 'object') {
+      if (typeof (j as any).cookie === 'string') return tryHeaderParse((j as any).cookie);
+      return Object.fromEntries(Object.entries(j).map(([k,v])=>[k, String(v)]));
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // python/object-literal with single quotes -> try to normalize and parse
+  if (/^\s*\{.*'/.test(s)) {
+    try {
+      const fixed = s.replace(/'/g, '"');
+      const j2 = JSON.parse(fixed);
+      if (j2 && typeof j2 === 'object') {
+        if (typeof (j2 as any).cookie === 'string') return tryHeaderParse((j2 as any).cookie);
+        return Object.fromEntries(Object.entries(j2).map(([k,v])=>[k, String(v)]));
+      }
+    } catch (e) {
+      // fallthrough to header parse
+    }
+  }
+
+  // header-style fallback
+  return tryHeaderParse(s);
+}
+
 export function buildSearchJsonBody(self: any, query: string, mode: string, model: Models | null, uploaded_files: string[], follow_up: any, incognito: boolean, language: string, sources: Array<string>): any {
   const model_preference = computeModelPreference(mode, model);
   return {
