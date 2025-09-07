@@ -4,6 +4,13 @@
  * Lightweight client to interact with https://www.emailnator.com for
  * generating temporary email addresses and polling for messages.
  */
+/**
+ * Emailnator
+ *
+ * Lightweight client for interacting with Emailnator.com to generate
+ * temporary email addresses and poll for incoming messages. Useful for
+ * automated account creation flows.
+ */
 export class Emailnator {
   public email: string = "";
   private headers: Record<string, string>;
@@ -116,8 +123,8 @@ export class Emailnator {
   /**
    * reload(options)
    *
-   * Refresh inbox messages. When `wait` is true and `wait_for` is provided
-   * the method will poll until the predicate matches a message or timeout.
+   * Refresh inbox messages and optionally poll until a predicate matches
+   * a new message or a timeout occurs.
    */
   async reload(
     options: {
@@ -179,6 +186,9 @@ export class Emailnator {
     return await res.text();
   }
 
+  /**
+   * Find a message matching `func` in the provided messages or the inbox.
+   */
   get(func: (m: any) => boolean, msgs?: any[]): any | undefined {
     const target = msgs ?? this.inbox;
     for (const m of target) if (func(m)) return m;

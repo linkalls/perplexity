@@ -9,6 +9,18 @@ This repository provides a lightweight TypeScript client for the public Perplexi
 - Includes utilities to receive and parse SSE (Server-Sent Events).
 - Offers a synchronous-style `PerplexityClient` and an async-initializing wrapper `PerplexityAsyncClient` (`src/perplexity_async.ts`).
 
+## Features (detailed)
+
+- Streaming SSE parsing utilities: low-level `sseStream` in `PerplexityClient` and high-level extractors `extractStreamEntries`, `extractStreamAnswers`, and `extractStreamBackend` for incremental consumption.
+- Non-stream aggregated search: `PerplexityClient.search` collects SSE chunks and returns a merged `PerplexityResponse`.
+- Streaming search: `PerplexityClient.asyncSearch` returns an async generator yielding `PerplexityChunk` pieces for real-time processing.
+- File uploads: `uploadFiles` helper to create an upload URL and upload files, returning attachment URLs for inclusion in a query.
+- Model selection helpers: `buildModelPrefMap` and `computeModelPreference` normalize friendly model names to canonical identifiers.
+- Cookie parsing: `parseCookieEnv` supports multiple cookie string formats for easy environment configuration.
+- Temporary email automation: `Emailnator` to generate and poll disposable inboxes for account creation flows.
+- Experimental Labs websocket client: `LabsClient` for low-latency streaming experiments using Socket.IO handshake.
+- Types and helpers: `src/types.ts` contains comprehensive types and type-guard helpers for safe response handling.
+
 ## Quick start
 
 1. Install dependencies (this project assumes a `package.json` is present):

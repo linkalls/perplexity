@@ -7,6 +7,13 @@
  * Experimental client that connects to the Perplexity Labs websocket
  * interface. Useful for low-latency streaming experiments with lab models.
  */
+/**
+ * LabsClient
+ *
+ * Experimental client that connects to Perplexity Labs via Socket.IO
+ * (WebSocket). Supports streaming answers via `ask` with optional
+ * generator-based streaming.
+ */
 export class LabsClient {
   base = "https://www.perplexity.ai";
   timestamp: string;

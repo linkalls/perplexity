@@ -11,8 +11,10 @@ import {
 } from "./search_helpers";
 
 /**
- * A single incremental SSE chunk emitted by Perplexity's streaming API.
- * Consumers can treat this as a partial/complete response piece.
+ * Chunk
+ *
+ * Alias for `PerplexityChunk` - represents a single incremental SSE chunk
+ * emitted by Perplexity's streaming API.
  */
 export type Chunk = PerplexityChunk;
 
@@ -27,6 +29,13 @@ export type Chunk = PerplexityChunk;
  * Typical usage:
  *   const cli = new PerplexityClient(cookies);
  *   const res = await cli.search('hello world');
+ */
+/**
+ * PerplexityClient
+ *
+ * High-level client for interacting with Perplexity.ai. Supports both
+ * non-streaming `search` and streaming `asyncSearch` modes, file uploads,
+ * and account creation helpers.
  */
 export class PerplexityClient {
   base = "https://www.perplexity.ai";

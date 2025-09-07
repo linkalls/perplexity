@@ -1,7 +1,26 @@
-import { ensureSearchArgs, uploadFiles, buildSearchJsonBody, postSearch, buildModelPrefMap } from './search_helpers';
+import { ensureSearchArgs, uploadFiles, buildSearchJsonBody, postSearch, buildModelPrefMap, } from "./search_helpers";
+/**
+ * PerplexityClient
+ *
+ * High-level client for interacting with Perplexity.ai programmatically.
+ * - supports streaming and non-stream searches
+ * - lightweight file upload helper
+ * - createAccount flow (via Emailnator) for automated account creation
+ *
+ * Typical usage:
+ *   const cli = new PerplexityClient(cookies);
+ *   const res = await cli.search('hello world');
+ */
+/**
+ * PerplexityClient
+ *
+ * High-level client for interacting with Perplexity.ai. Supports both
+ * non-streaming `search` and streaming `asyncSearch` modes, file uploads,
+ * and account creation helpers.
+ */
 export class PerplexityClient {
     cookies;
-    base = 'https://www.perplexity.ai';
+    base = "https://www.perplexity.ai";
     own;
     copilot;
     file_upload;
@@ -15,7 +34,9 @@ export class PerplexityClient {
         // fire-and-forget to avoid making the constructor async
         (async () => {
             try {
-                await fetch(this.base + '/api/auth/session', { headers: this.buildHeaders() });
+                await fetch(this.base + "/api/auth/session", {
+                    headers: this.buildHeaders(),
+                });
             }
             catch (e) {
                 // ignore network/errors during best-effort init
@@ -35,7 +56,7 @@ export class PerplexityClient {
      *
      * implementation but is separated for clarity.
      */
-    async asyncSearch(query, mode = 'auto', model = null, sources = ['web'], files = {}, language = 'en-US', follow_up = null, incognito = false) {
+    async asyncSearch(query, mode = "auto", model = null, sources = ["web"], files = {}, language = "en-US", follow_up = null, incognito = false) {
         // basic validation (same as in search)
         ensureSearchArgs(this, mode, sources, files);
         const uploaded_files = await uploadFiles(this, files);
@@ -48,7 +69,7 @@ export class PerplexityClient {
             const collected = [];
             for await (const chunk of self.sseStream(res)) {
                 // normalize chunk.text to array for easier downstream merging
-                if (chunk.text && typeof chunk.text === 'string')
+                if (chunk.text && typeof chunk.text === "string")
                     chunk.text = [chunk.text];
                 collected.push(chunk);
                 yield chunk;
@@ -72,13 +93,17 @@ export class PerplexityClient {
                     }
                 };
                 for (const c of collected) {
-                    if (!c || typeof c !== 'object')
+                    if (!c || typeof c !== "object")
                         continue;
                     for (const [k, v] of Object.entries(c)) {
-                        if (k === 'text') {
+                        if (k === "text") {
                             agg.text = (agg.text || []).concat(Array.isArray(v) ? v : [v]);
                         }
-                        else if (k === 'widget_data' || k === 'media_items' || k === 'attachments' || k === 'blocks' || k === 'answer_modes') {
+                        else if (k === "widget_data" ||
+                            k === "media_items" ||
+                            k === "attachments" ||
+                            k === "blocks" ||
+                            k === "answer_modes") {
                             pushUnique(k, v);
                         }
                         else if (v !== undefined) {
@@ -93,10 +118,14 @@ export class PerplexityClient {
                     let firstAskTextIndex = null;
                     for (let i = 0; i < agg.blocks.length; i++) {
                         const b = agg.blocks[i];
-                        if (b && b.intended_usage === 'ask_text' && b.markdown_block) {
+                        if (b && b.intended_usage === "ask_text" && b.markdown_block) {
                             if (firstAskTextIndex === null)
                                 firstAskTextIndex = mergedBlocks.length;
-                            const chunks = Array.isArray(b.markdown_block.chunks) ? b.markdown_block.chunks : (b.markdown_block.chunks ? [b.markdown_block.chunks] : []);
+                            const chunks = Array.isArray(b.markdown_block.chunks)
+                                ? b.markdown_block.chunks
+                                : b.markdown_block.chunks
+                                    ? [b.markdown_block.chunks]
+                                    : [];
                             askTextChunks = askTextChunks.concat(chunks);
                             // do not push individual ask_text blocks
                         }
@@ -107,63 +136,80 @@ export class PerplexityClient {
                     if (askTextChunks.length > 0) {
                         const normalizedChunks = self.normalizeChunksField(askTextChunks);
                         const mergedMarkdown = {
-                            progress: 'finished',
+                            progress: "finished",
                             chunks: normalizedChunks,
                             chunk_starting_offset: 0,
                         };
-                        const joined = normalizedChunks.join('');
+                        const joined = normalizedChunks.join("");
                         mergedMarkdown.answer = joined;
-                        const insertAt = firstAskTextIndex === null ? mergedBlocks.length : firstAskTextIndex;
-                        mergedBlocks.splice(insertAt, 0, { intended_usage: 'ask_text', markdown_block: mergedMarkdown });
+                        const insertAt = firstAskTextIndex === null
+                            ? mergedBlocks.length
+                            : firstAskTextIndex;
+                        mergedBlocks.splice(insertAt, 0, {
+                            intended_usage: "ask_text",
+                            markdown_block: mergedMarkdown,
+                        });
                     }
                     agg.blocks = mergedBlocks;
                 }
                 return agg;
             }
-            throw new Error('No final response received');
+            throw new Error("No final response received");
         }
         return Promise.resolve(wrapper());
     }
     buildHeaders(additional = {}) {
         const headers = {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'accept-language': 'en-US,en;q=0.9',
-            'cache-control': 'max-age=0',
-            'dnt': '1',
-            'user-agent': 'bun-perplexity-client/0.1',
-            'content-type': 'application/json',
-            ...additional
+            accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "accept-language": "en-US,en;q=0.9",
+            "cache-control": "max-age=0",
+            dnt: "1",
+            "user-agent": "bun-perplexity-client/0.1",
+            "content-type": "application/json",
+            ...additional,
         };
         if (Object.keys(this.cookies).length) {
-            headers['cookie'] = Object.entries(this.cookies).map(([k, v]) => `${k}=${v}`).join('; ');
+            headers["cookie"] = Object.entries(this.cookies)
+                .map(([k, v]) => `${k}=${v}`)
+                .join("; ");
         }
         return headers;
     }
     // low-dependency mime guessing for common extensions
     guessMime(filename) {
-        const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+        const ext = filename.split(".").pop()?.toLowerCase() ?? "";
         switch (ext) {
-            case 'jpg':
-            case 'jpeg': return 'image/jpeg';
-            case 'png': return 'image/png';
-            case 'gif': return 'image/gif';
-            case 'webp': return 'image/webp';
-            case 'pdf': return 'application/pdf';
-            case 'txt': return 'text/plain';
-            case 'md': return 'text/markdown';
-            case 'csv': return 'text/csv';
-            case 'json': return 'application/json';
-            default: return 'application/octet-stream';
+            case "jpg":
+            case "jpeg":
+                return "image/jpeg";
+            case "png":
+                return "image/png";
+            case "gif":
+                return "image/gif";
+            case "webp":
+                return "image/webp";
+            case "pdf":
+                return "application/pdf";
+            case "txt":
+                return "text/plain";
+            case "md":
+                return "text/markdown";
+            case "csv":
+                return "text/csv";
+            case "json":
+                return "application/json";
+            default:
+                return "application/octet-stream";
         }
     }
     sizeOf(file) {
         if (file instanceof Uint8Array)
             return file.byteLength;
-        if (typeof Blob !== 'undefined' && file instanceof Blob)
+        if (typeof Blob !== "undefined" && file instanceof Blob)
             return file.size;
-        if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer)
+        if (typeof ArrayBuffer !== "undefined" && file instanceof ArrayBuffer)
             return file.byteLength;
-        if (typeof file === 'string')
+        if (typeof file === "string")
             return new TextEncoder().encode(file).length;
         return 0;
     }
@@ -178,7 +224,7 @@ export class PerplexityClient {
                     push(it);
                 return;
             }
-            if (typeof v === 'string') {
+            if (typeof v === "string") {
                 out.push(v);
                 return;
             }
@@ -198,23 +244,23 @@ export class PerplexityClient {
         if (!res.body)
             return;
         const reader = res.body.getReader();
-        let buf = '';
+        let buf = "";
         while (true) {
             const { done, value } = await reader.read();
             if (done)
                 break;
             buf += new TextDecoder().decode(value);
-            const parts = buf.split('\r\n\r\n');
-            buf = parts.pop() ?? '';
+            const parts = buf.split("\r\n\r\n");
+            buf = parts.pop() ?? "";
             for (const part of parts) {
                 const content = part;
-                if (content.startsWith('event: message\r\n')) {
-                    const dataPrefix = 'event: message\r\ndata: ';
+                if (content.startsWith("event: message\r\n")) {
+                    const dataPrefix = "event: message\r\ndata: ";
                     const jsonText = content.slice(dataPrefix.length);
                     try {
                         const parsed = JSON.parse(jsonText);
                         const textVal = parsed?.text;
-                        if (typeof textVal === 'string') {
+                        if (typeof textVal === "string") {
                             try {
                                 parsed.text = JSON.parse(textVal);
                             }
@@ -240,7 +286,7 @@ export class PerplexityClient {
      * - files: Record<filename, Uint8Array|Blob|string>
      * - stream: if true, returns AsyncGenerator<Chunk>
      */
-    async search(query, mode = 'auto', model = null, sources = ['web'], files = {}, language = 'en-US', follow_up = null, incognito = false) {
+    async search(query, mode = "auto", model = null, sources = ["web"], files = {}, language = "en-US", follow_up = null, incognito = false) {
         // basic validation
         ensureSearchArgs(this, mode, sources, files);
         const uploaded_files = await uploadFiles(this, files);
@@ -251,7 +297,7 @@ export class PerplexityClient {
         const collected = [];
         for await (const chunk of this.sseStream(res)) {
             collected.push(chunk);
-            // detect final SSE message 
+            // detect final SSE message
             if (chunk && (chunk.final === true || chunk.final_sse_message === true)) {
                 break;
             }
@@ -276,13 +322,17 @@ export class PerplexityClient {
                 }
             };
             for (const c of collected) {
-                if (!c || typeof c !== 'object')
+                if (!c || typeof c !== "object")
                     continue;
                 for (const [k, v] of Object.entries(c)) {
-                    if (k === 'text') {
+                    if (k === "text") {
                         agg.text = (agg.text || []).concat(Array.isArray(v) ? v : [v]);
                     }
-                    else if (k === 'widget_data' || k === 'media_items' || k === 'attachments' || k === 'blocks' || k === 'answer_modes') {
+                    else if (k === "widget_data" ||
+                        k === "media_items" ||
+                        k === "attachments" ||
+                        k === "blocks" ||
+                        k === "answer_modes") {
                         pushUnique(k, v);
                     }
                     else if (v !== undefined) {
@@ -297,10 +347,14 @@ export class PerplexityClient {
                 let firstAskTextIndex = null;
                 for (let i = 0; i < agg.blocks.length; i++) {
                     const b = agg.blocks[i];
-                    if (b && b.intended_usage === 'ask_text' && b.markdown_block) {
+                    if (b && b.intended_usage === "ask_text" && b.markdown_block) {
                         if (firstAskTextIndex === null)
                             firstAskTextIndex = mergedBlocks.length;
-                        const chunks = Array.isArray(b.markdown_block.chunks) ? b.markdown_block.chunks : (b.markdown_block.chunks ? [b.markdown_block.chunks] : []);
+                        const chunks = Array.isArray(b.markdown_block.chunks)
+                            ? b.markdown_block.chunks
+                            : b.markdown_block.chunks
+                                ? [b.markdown_block.chunks]
+                                : [];
                         askTextChunks = askTextChunks.concat(chunks);
                         // do not push individual ask_text blocks
                     }
@@ -311,54 +365,160 @@ export class PerplexityClient {
                 if (askTextChunks.length > 0) {
                     const normalizedChunks = this.normalizeChunksField(askTextChunks);
                     const mergedMarkdown = {
-                        progress: 'finished',
+                        progress: "finished",
                         chunks: normalizedChunks,
                         chunk_starting_offset: 0,
                     };
                     // Always construct the merged answer from normalized chunks
-                    const joined = normalizedChunks.join('');
+                    const joined = normalizedChunks.join("");
                     mergedMarkdown.answer = joined;
                     // insert merged ask_text block at firstAskTextIndex if known, otherwise push at end
-                    const insertAt = firstAskTextIndex === null ? mergedBlocks.length : firstAskTextIndex;
-                    mergedBlocks.splice(insertAt, 0, { intended_usage: 'ask_text', markdown_block: mergedMarkdown });
+                    const insertAt = firstAskTextIndex === null
+                        ? mergedBlocks.length
+                        : firstAskTextIndex;
+                    mergedBlocks.splice(insertAt, 0, {
+                        intended_usage: "ask_text",
+                        markdown_block: mergedMarkdown,
+                    });
                 }
                 agg.blocks = mergedBlocks;
             }
             return agg;
         }
-        throw new Error('No final response received');
+        throw new Error("No final response received");
     }
     // add createAccount method
     async createAccount(emailnatorCookies) {
         // minimal account creation flow using Emailnator
-        const Emailnator = (await import('./emailnator')).default;
+        const Emailnator = (await import("./emailnator")).default;
         const en = new Emailnator(emailnatorCookies);
         await en.initGenerate();
-        // request signin link
-        const initResp = await fetch(this.base + '/api/auth/signin/email', {
-            method: 'POST',
-            headers: this.buildHeaders({ 'content-type': 'application/x-www-form-urlencoded' }),
-            body: new URLSearchParams({
-                email: en.email,
-                csrfToken: (this.cookies['next-auth.csrf-token'] || '').split('%')[0],
-                callbackUrl: 'https://www.perplexity.ai/',
-                json: 'true'
-            }).toString()
-        });
-        if (!initResp.ok)
-            throw new Error('signin request failed');
+        console.log("Emailnator generated address:", en.email);
+        // ensure we have a CSRF token (try cookies first, then fetch endpoint)
+        let csrfToken = (this.cookies["next-auth.csrf-token"] || "").split("%")[0] || "";
+        if (!csrfToken) {
+            try {
+                const cRes = await fetch(this.base + "/api/auth/csrf", {
+                    headers: this.buildHeaders(),
+                });
+                if (cRes.ok) {
+                    const cj = await cRes.json().catch(() => null);
+                    csrfToken =
+                        cj && (cj.csrfToken || cj.csrf_token)
+                            ? cj.csrfToken || cj.csrf_token
+                            : csrfToken;
+                    console.log("Fetched CSRF token from /api/auth/csrf:", csrfToken ? "[redacted]" : "(none)");
+                }
+                else {
+                    console.warn("/api/auth/csrf responded with status", cRes.status);
+                }
+            }
+            catch (e) {
+                console.warn("Failed to fetch CSRF token:", e);
+            }
+        }
+        // request signin link with retry/backoff for rate limits (429)
+        const maxAttempts = 6;
+        let initResp = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                initResp = await fetch(this.base + "/api/auth/signin/email", {
+                    method: "POST",
+                    headers: this.buildHeaders({
+                        "content-type": "application/x-www-form-urlencoded",
+                    }),
+                    body: new URLSearchParams({
+                        email: en.email,
+                        csrfToken: csrfToken,
+                        callbackUrl: "https://www.perplexity.ai/",
+                        json: "true",
+                    }).toString(),
+                });
+            }
+            catch (e) {
+                console.warn("signin request network error (attempt", attempt, "):", e);
+            }
+            if (!initResp) {
+                // small backoff and retry
+                await new Promise((r) => setTimeout(r, 1000 * attempt));
+                continue;
+            }
+            if (initResp.status === 429) {
+                const txt = await initResp.text().catch(() => "<no-body>");
+                console.warn("signin rate-limited (429), attempt", attempt, "body:", txt);
+                // try to read suggested wait time in message, otherwise exponential backoff
+                const waitMs = 60 * 1000 * (attempt === 1 ? 1 : attempt); // escalate wait
+                await new Promise((r) => setTimeout(r, waitMs));
+                continue;
+            }
+            if (!initResp.ok) {
+                const txt = await initResp.text().catch(() => "<no-body>");
+                console.error("signin request failed, status:", initResp.status, "body:", txt);
+                // for 4xx other than 429 don't retry
+                if (initResp.status >= 400 && initResp.status < 500)
+                    break;
+                // otherwise retry
+                await new Promise((r) => setTimeout(r, 1000 * attempt));
+                continue;
+            }
+            // success
+            break;
+        }
+        if (!initResp || !initResp.ok) {
+            const txt = initResp
+                ? await initResp.text().catch(() => "<no-body>")
+                : "<no-response>";
+            console.error("Final signin request result, status:", initResp ? initResp.status : "(none)", "body:", txt);
+            throw new Error("signin request failed");
+        }
         // wait for email
-        const new_msgs = await en.reload({ wait: true, wait_for: (m) => m.subject === 'Sign in to Perplexity', timeout: 20 });
-        if (!new_msgs)
-            throw new Error('no signin email');
-        const msg = en.get((x) => x.subject === 'Sign in to Perplexity');
+        // give more time for the signin email to arrive (some providers are slow)
+        const new_msgs = await en.reload({
+            wait: true,
+            wait_for: (m) => m.subject === "Sign in to Perplexity",
+            timeout: 60,
+        });
+        if (!new_msgs) {
+            console.error("No new messages arrived. inbox length:", en.inbox?.length ?? 0, "inbox_ads length:", en.inbox_ads?.length ?? 0);
+            throw new Error("no signin email");
+        }
+        const msg = en.get((x) => x.subject === "Sign in to Perplexity");
         const content = await en.open(msg.messageID);
-        const re = /"(https:\/\/www\\.perplexity\\.ai\/api\/auth\/callback\/email\?callbackUrl=.*?)"/;
-        const m = re.exec(content);
-        if (!m)
-            throw new Error('signin link not found');
-        const link = m[1];
-        await fetch(link, { method: 'GET', headers: this.buildHeaders() });
+        // Try several strategies to locate the signin callback URL in the email
+        // - unescape common HTML entities
+        // - look for a quoted URL, an href= attribute, or any raw URL containing the callback path
+        const unescaped = String(content)
+            .replace(/&quot;|&#34;/g, '"')
+            .replace(/&amp;/g, "&")
+            .replace(/&#39;/g, "'");
+        const reQuoted = /"(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?callbackUrl=[^"]+)"/;
+        const reHref = /href=['"]?(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?[^'"\s>]+)/i;
+        const reGeneric = /(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?[^"'<>\s]+)/;
+        let m = reQuoted.exec(unescaped) ||
+            reHref.exec(unescaped) ||
+            reGeneric.exec(unescaped);
+        // If not found, try a decoded version (some providers URL-encode the whole link)
+        if (!m) {
+            try {
+                const decoded = decodeURIComponent(unescaped);
+                m =
+                    reQuoted.exec(decoded) ||
+                        reHref.exec(decoded) ||
+                        reGeneric.exec(decoded);
+            }
+            catch (e) {
+                // ignore decode errors
+            }
+        }
+        if (!m) {
+            // helpful debug: show a short snippet of the email to aid diagnosis
+            console.error("Email content snippet:", unescaped.slice(0, 400));
+            throw new Error("signin link not found");
+        }
+        let link = m[1];
+        // ensure common HTML-escaped ampersands are unescaped in the URL
+        link = String(link).replace(/&amp;/g, "&");
+        await fetch(link, { method: "GET", headers: this.buildHeaders() });
         this.copilot = 5;
         this.file_upload = 10;
         return true;
@@ -371,17 +531,26 @@ export class PerplexityClient {
      * 4) fallback to internal model map
      */
     async getModels() {
-        const candidates = ['/api/search/models', '/rest/models', '/api/models', '/api/public/models'];
+        const candidates = [
+            "/api/search/models",
+            "/rest/models",
+            "/api/models",
+            "/api/public/models",
+        ];
         for (const path of candidates) {
             try {
-                const resp = await fetch(this.base + path, { headers: this.buildHeaders({ accept: 'application/json' }) });
+                const resp = await fetch(this.base + path, {
+                    headers: this.buildHeaders({ accept: "application/json" }),
+                });
                 if (resp.ok) {
-                    const ct = resp.headers.get('content-type') || '';
-                    if (ct.includes('application/json')) {
+                    const ct = resp.headers.get("content-type") || "";
+                    if (ct.includes("application/json")) {
                         try {
                             return await resp.json();
                         }
-                        catch (e) { /* ignore parse error */ }
+                        catch (e) {
+                            /* ignore parse error */
+                        }
                     }
                 }
             }
@@ -391,11 +560,15 @@ export class PerplexityClient {
         }
         // try cookie-based model hint
         try {
-            const cookieVal = (this.cookies && (this.cookies['pplx.search-models-v4'] || this.cookies['pplx.search-models-v3']));
+            const cookieVal = (this.cookies &&
+                (this.cookies["pplx.search-models-v4"] ||
+                    this.cookies["pplx.search-models-v3"]));
             if (cookieVal) {
                 try {
                     const decoded = decodeURIComponent(String(cookieVal));
-                    const parsed = JSON.parse(decoded.startsWith('{') ? decoded : decoded.replace(/^pplx\.search-models-v\d+=/, ''));
+                    const parsed = JSON.parse(decoded.startsWith("{")
+                        ? decoded
+                        : decoded.replace(/^pplx\.search-models-v\d+=/, ""));
                     return parsed;
                 }
                 catch (e) {
@@ -408,12 +581,15 @@ export class PerplexityClient {
         }
         // try session endpoint for hints
         try {
-            const s = await fetch(this.base + '/api/auth/session', { headers: this.buildHeaders({ accept: 'application/json' }) });
+            const s = await fetch(this.base + "/api/auth/session", {
+                headers: this.buildHeaders({ accept: "application/json" }),
+            });
             if (s.ok) {
                 try {
                     const body = await s.json();
                     // heuristics: search for keys that might contain model info
-                    if (body && (body.search_models || body['pplx.search-models-v4'] || body.user))
+                    if (body &&
+                        (body.search_models || body["pplx.search-models-v4"] || body.user))
                         return body;
                 }
                 catch (e) { }

@@ -6,6 +6,13 @@ import { PerplexityClient as _PC } from "./perplexity";
  * Provides an async factory and lazy initialization for environments where
  * synchronous construction is undesirable.
  */
+/**
+ * PerplexityAsyncClient
+ *
+ * An async-initializing wrapper around `PerplexityClient`. Use this in
+ * environments that prefer lazy or async construction (e.g. when network
+ * access is required during initialization).
+ */
 export class PerplexityAsyncClient {
   public client: any;
   constructor(public cookies: Record<string, string> = {}) {

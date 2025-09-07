@@ -1,4 +1,16 @@
-// Thin async wrapper 
+// Thin async wrapper
+/**
+ * Async wrapper for PerplexityClient.
+ * Provides an async factory and lazy initialization for environments where
+ * synchronous construction is undesirable.
+ */
+/**
+ * PerplexityAsyncClient
+ *
+ * An async-initializing wrapper around `PerplexityClient`. Use this in
+ * environments that prefer lazy or async construction (e.g. when network
+ * access is required during initialization).
+ */
 export class PerplexityAsyncClient {
     cookies;
     client;
@@ -8,13 +20,17 @@ export class PerplexityAsyncClient {
     }
     async init() {
         // Create underlying client
-        const mod = await import('./perplexity');
+        const mod = await import("./perplexity");
         this.client = new mod.PerplexityClient(this.cookies);
         // perform an initial session GET
         try {
-            await fetch('https://www.perplexity.ai/api/auth/session', { headers: this.client['buildHeaders']() });
+            await fetch("https://www.perplexity.ai/api/auth/session", {
+                headers: this.client["buildHeaders"](),
+            });
         }
-        catch (e) { /* ignore */ }
+        catch (e) {
+            /* ignore */
+        }
         return this;
     }
     // convenience factory to mimic `await Client(cookies)` style

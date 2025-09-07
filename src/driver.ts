@@ -8,6 +8,13 @@
  * structural stub - actual implementations should use Playwright/Playwright
  * patches to perform request interception and automated account creation.
  */
+/**
+ * Driver
+ *
+ * Abstraction/stub for browser automation workflows. Intended as a surface
+ * for Playwright-based implementations that perform request interception
+ * and automated account creation flows.
+ */
 export class Driver {
   signin_regex =
     /"(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?callbackUrl=.*?)"/;

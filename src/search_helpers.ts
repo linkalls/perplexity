@@ -7,6 +7,13 @@ import type { PerplexityChunk, Models } from "./types";
  * Returns a RFC4122-style random UUID. Uses the global crypto.randomUUID
  * when available and falls back to a JS implementation otherwise.
  */
+/**
+ * Generate a random RFC4122-style UUID.
+ *
+ * Uses the global crypto.randomUUID when available, otherwise falls back to
+ * a JS implementation. Returned value is a string suitable for use as a
+ * frontend UUID or correlation id.
+ */
 export function cryptoRandomUuid(): string {
   if (
     typeof crypto !== "undefined" &&
@@ -25,6 +32,14 @@ export function cryptoRandomUuid(): string {
  *
  * Validates search arguments and decrements client's available quotas
  * (copilot/file_upload) when appropriate. Throws on invalid input.
+ */
+/**
+ * Validate search arguments and update client quota counters.
+ *
+ * This helper validates `mode`, `sources` and `files` arguments used by the
+ * `PerplexityClient` search APIs. When the call represents a paid/pro mode
+ * it decrements the client's `copilot` counter. When files are provided it
+ * decrements `file_upload`. Throws on invalid inputs or insufficient quota.
  */
 export function ensureSearchArgs(
   self: any,
@@ -62,6 +77,13 @@ export function ensureSearchArgs(
  *
  * Uploads provided files via the platform's upload endpoint and returns
  * an array of publicly accessible URLs (or object URLs) for attachments.
+ */
+/**
+ * Upload local files and return publicly-accessible URLs.
+ *
+ * The function calls the platform's upload creation endpoint for each file
+ * and performs an HTTP form upload to the returned bucket URL. It returns an
+ * array of URLs that can be attached to search requests.
  */
 export async function uploadFiles(
   self: any,
@@ -151,6 +173,12 @@ export async function uploadFiles(
  * Returns a mapping of friendly mode/model names to platform-specific
  * model identifiers. Used by computeModelPreference.
  */
+/**
+ * Build a mapping of friendly mode/model names to platform identifiers.
+ *
+ * The returned object is used by `computeModelPreference` to resolve a
+ * canonical model id from a requested mode and (optional) model name.
+ */
 export function buildModelPrefMap(): any {
   // Expanded mapping based on observed accepted/displayed model names from probing.
   // Normalization in computeModelPreference will also help match many variants.
@@ -186,6 +214,12 @@ export function buildModelPrefMap(): any {
  * Normalizes and resolves the desired model for a given mode. Returns a
  * canonical model identifier or the mode default when no explicit match is
  * found.
+ */
+/**
+ * Compute the canonical model identifier for the given mode and model.
+ *
+ * If `model` is null the mode's default will be returned. The function
+ * performs normalization of keys and values to match common caller inputs.
  */
 export function computeModelPreference(
   mode: string,
@@ -234,6 +268,13 @@ export function computeModelPreference(
  * Parse a variety of cookie environment formats into a simple
  * Record<string,string> map. Accepts JSON object strings, header-style
  * 'k=v; k2=v2' strings, and python-style single-quoted objects.
+ */
+/**
+ * Parse a cookie-like environment value into a key/value map.
+ *
+ * Accepts JSON object strings, header-style 'k=v; k2=v2' strings and
+ * python-style single-quoted objects. Returns an empty object for empty
+ * input.
  */
 export function parseCookieEnv(
   raw: string | undefined
@@ -295,6 +336,12 @@ export function parseCookieEnv(
  * Build the JSON payload for the search endpoint from user-supplied
  * parameters and the client's runtime state.
  */
+/**
+ * Build the JSON payload for the search SSE endpoint.
+ *
+ * This constructs the parameters expected by Perplexity's `rest/sse`
+ * endpoint including attachments, model preference and contextual UUIDs.
+ */
 export function buildSearchJsonBody(
   self: any,
   query: string,
@@ -333,6 +380,12 @@ export function buildSearchJsonBody(
  * POST the search payload to the platform SSE endpoint and return the
  * raw Response object for consumption by the SSE parser.
  */
+/**
+ * POST the search payload and return the raw Response for SSE consumption.
+ *
+ * Callers typically pass the returned Response into an SSE parser to
+ * iterate incremental chunks.
+ */
 export async function postSearch(self: any, jsonBody: any): Promise<Response> {
   return await fetch(self.base + "/rest/sse/perplexity_ask", {
     method: "POST",
@@ -349,6 +402,13 @@ export async function postSearch(self: any, jsonBody: any): Promise<Response> {
 // arrive. Text pieces are merged/normalized: consecutive fragments are joined
 // with appropriate spaces/newlines preserved when reasonable.
 // ...existing code...
+/**
+ * Extract textual entries from a stream of PerplexityChunk SSE messages.
+ *
+ * Yields objects of shape `{ text: string, backend_uuid?: string }` as
+ * readable pieces arrive. This helper normalizes `chunk.text` arrays and
+ * extracts `ask_text` block contents where available.
+ */
 export async function* extractStreamEntries(
   stream: AsyncGenerator<PerplexityChunk, any, void>
 ): AsyncGenerator<{ text: string; backend_uuid?: string }, void, void> {
@@ -443,6 +503,12 @@ export async function* extractStreamEntries(
 // Backwards-compatible wrapper: yields only strings (text). If a chunk also
 // contains backend_uuid, this wrapper will ignore it; use extractStreamEntries
 // if you need the backend_uuid together with text.
+/**
+ * Convenience extractor returning only text strings from an SSE stream.
+ *
+ * It internally uses `extractStreamEntries` and yields non-empty textual
+ * fragments for easy consumption by caller code that only needs text.
+ */
 export async function* extractStreamAnswers(
   stream: AsyncGenerator<PerplexityChunk, any, void>
 ): AsyncGenerator<string, void, void> {
@@ -456,6 +522,12 @@ export async function* extractStreamAnswers(
 // backend identifier. It will yield each unique backend_uuid arrival (including
 // empty text events that only carry backend_uuid). Callers can use this to
 // capture the conversation's backend id for follow-up queries.
+/**
+ * Yield unique backend_uuid values as they become available in the stream.
+ *
+ * Useful when callers want to capture the backend identifier for
+ * follow-up queries or diagnostics.
+ */
 export async function* extractStreamBackend(
   stream: AsyncGenerator<PerplexityChunk, any, void>
 ): AsyncGenerator<string, void, void> {
