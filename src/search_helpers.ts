@@ -1,7 +1,7 @@
 // Shared helpers extracted from perplexity client to keep implementation small
 import type { PerplexityChunk,Models } from './types';
 
-export function cryptoRandomUuid(): string {
+export function cryptoRandomUuid() {
   if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') return (crypto as any).randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { const r = Math.random()*16|0; const v = c==='x'?r:(r&0x3|0x8); return v.toString(16); });
 }
@@ -127,7 +127,7 @@ export function computeModelPreference(mode: string, model: Models | null): stri
   return byMode['__default'];
 }
 
-export function buildSearchJsonBody(self: any, query: string, mode: string, model: Models | null, uploaded_files: string[], follow_up: any, incognito: boolean, language: string, sources: Array<string>): any {
+export function buildSearchJsonBody(self: any, query: string, mode: string, model: Models | null, uploaded_files: string[], follow_up: any, incognito: boolean, language: string, sources: Array<string>) {
   const model_preference = computeModelPreference(mode, model);
   return {
     query_str: query,
@@ -162,20 +162,18 @@ export async function postSearch(self: any, jsonBody: any): Promise<Response> {
 // More advanced extractor: yields objects { text, backend_uuid? } as pieces
 // arrive. Text pieces are merged/normalized: consecutive fragments are joined
 // with appropriate spaces/newlines preserved when reasonable.
+// ...existing code...
 export async function* extractStreamEntries(stream: AsyncGenerator<PerplexityChunk, any, void>): AsyncGenerator<{text: string, backend_uuid?: string}, void, void> {
-  // A simple helper to normalize and join fragments into readable text.
-  const normalizePiece = (s: string) => {
-    // trim only on ends, keep intentional newlines inside; collapse multiple
-    // spaces to single space for inline fragments.
-    return s.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').replace(/\s+/g, ' ').trim();
-  };
+  // Normalize pieces: preserve meaningful newlines, collapse excessive spaces/tabs,
+  // and avoid destroying spacing inside paragraphs.
+
 
   for await (const chunk of stream) {
     try {
       const backend = (chunk as any).backend_uuid as string | undefined;
 
-      // Collect text pieces from chunk.text and ask_text blocks.
-      const outPieces: string[] = [];
+  // Collect text pieces from chunk.text and ask_text blocks.
+  const outPieces: string[] = [];
 
       if (chunk.text) {
         const arr = Array.isArray(chunk.text) ? chunk.text : [chunk.text];
@@ -197,18 +195,34 @@ export async function* extractStreamEntries(stream: AsyncGenerator<PerplexityChu
               const chunks = Array.isArray(md.chunks) ? md.chunks : [md.chunks];
               outPieces.push(chunks.filter((x:any)=>x!=null).map((x:any)=>typeof x==='string'?x:JSON.stringify(x)).join(''));
             }
+          } else {
+            // best-effort: try to pull readable text from other block kinds (e.g. web result snippets)
+            try {
+              // web_result_block.web_results[].snippet
+              if ((b as any).web_result_block && Array.isArray((b as any).web_result_block.web_results)) {
+                for (const r of (b as any).web_result_block.web_results) {
+                  if (r && typeof r.snippet === 'string' && r.snippet.trim()) outPieces.push(r.snippet);
+                }
+              }
+              // plan_block goals/descriptions
+              if ((b as any).plan_block && Array.isArray((b as any).plan_block.goals)) {
+                for (const g of (b as any).plan_block.goals) {
+                  if (g && typeof g.description === 'string' && g.description.trim()) outPieces.push(g.description);
+                }
+              }
+            } catch (e) {
+              // ignore extraction errors
+            }
           }
         }
       }
 
       if (outPieces.length > 0) {
-        // Merge pieces: preserve paragraph breaks (double newline) where present
-        const mergedRaw = outPieces.join(' ');
-        // Restore deliberate double-newlines, normalize others
-        const normalized = normalizePiece(mergedRaw).replace(/\n\s*\n/g, '\n\n');
-        if (normalized) yield { text: normalized, backend_uuid: backend };
+        // Merge pieces: do not inject extra spaces (pieces often contain their own spacing/newlines).
+        const mergedRaw = outPieces.join('');
+        if (mergedRaw) yield { text: mergedRaw, backend_uuid: backend };
       } else if (backend) {
-        // No textual piece but backend_uuid present — emit empty text with backend
+        // Emit backend arrival even if there's no text yet (keeps backward compatibility).
         yield { text: '', backend_uuid: backend };
       }
     } catch (e) {
@@ -223,5 +237,23 @@ export async function* extractStreamEntries(stream: AsyncGenerator<PerplexityChu
 export async function* extractStreamAnswers(stream: AsyncGenerator<PerplexityChunk, any, void>): AsyncGenerator<string, void, void> {
   for await (const e of extractStreamEntries(stream)) {
     if (e.text && typeof e.text === 'string' && e.text.trim()) yield e.text;
+  }
+}
+
+// New extractor: yield backend_uuid strings as they become available from the
+// stream. This is similar to extractStreamAnswers but focuses solely on the
+// backend identifier. It will yield each unique backend_uuid arrival (including
+// empty text events that only carry backend_uuid). Callers can use this to
+// capture the conversation's backend id for follow-up queries.
+export async function* extractStreamBackend(stream: AsyncGenerator<PerplexityChunk, any, void>): AsyncGenerator<string, void, void> {
+  const seen = new Set<string>();
+  for await (const e of extractStreamEntries(stream)) {
+    if (e.backend_uuid && typeof e.backend_uuid === 'string') {
+      // Avoid re-yielding the same backend_uuid repeatedly unless it changes.
+      if (!seen.has(e.backend_uuid)) {
+        seen.add(e.backend_uuid);
+        yield e.backend_uuid;
+      }
+    }
   }
 }
