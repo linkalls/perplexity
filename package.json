@@ -1,0 +1,9 @@
+{
+  "name": "perplexity-bun-client",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/x.ts",
+    "sample": "bun run sample/index.ts"
+  }
+}
