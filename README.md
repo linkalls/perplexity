@@ -65,7 +65,7 @@ MIT
 簡単な非ストリーミング検索の例（`sample/index.ts` を参照）:
 
 ```ts
-import { PerplexityClient } from "./src/perplexity";
+import { PerplexityClient } from "@ptt/perplexity";
 
 async function main() {
   const cli = new PerplexityClient();
@@ -93,7 +93,7 @@ main().catch(console.error);
 ストリーミング（逐次受信）利用の例（`sample/stream.ts` を参照）:
 
 ```ts
-import { PerplexityClient } from "./src/perplexity";
+import { PerplexityClient } from "@ptt/perplexity";
 
 async function main() {
   const cli = new PerplexityClient();
@@ -120,7 +120,7 @@ main().catch(console.error);
 Non-streaming example (see `sample/index.ts`):
 
 ```ts
-import { PerplexityClient } from "./src/perplexity";
+import { PerplexityClient } from "@ptt/perplexity";
 
 async function main() {
   const cli = new PerplexityClient();
@@ -146,7 +146,7 @@ main().catch(console.error);
 Streaming example (see `sample/stream.ts`):
 
 ```ts
-import { PerplexityClient } from "./src/perplexity";
+import { PerplexityClient } from "@ptt/perplexity";
 
 async function main() {
   const cli = new PerplexityClient();
