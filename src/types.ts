@@ -1,24 +1,22 @@
-
 // Detailed types derived from sample `result.json` to make the client strongly typed.
 
 export type ID = string;
 
 export type Models =
-  | 'sonar'
-  | 'experimental'
-  | 'gpt5'
-  | 'gpt5_nano'
-  | 'gpt45'
-  | 'claude_sonnet_4_0'
-  | 'claude37sonnetthinking'
-  | 'o3mini'
-  | 'gemini25pro'
-  | 'grok'
-  | 'pplx_pro'
-  | 'pplx_reasoning'
-  | 'pplx_alpha'
-  | 'turbo'
-  ;
+  | "sonar"
+  | "experimental"
+  | "gpt5"
+  | "gpt5_nano"
+  | "gpt45"
+  | "claude_sonnet_4_0"
+  | "claude37sonnetthinking"
+  | "o3mini"
+  | "gemini25pro"
+  | "grok"
+  | "pplx_pro"
+  | "pplx_reasoning"
+  | "pplx_alpha"
+  | "turbo";
 
 export interface ClassifierResults {
   personal_search: boolean;
@@ -52,7 +50,7 @@ export interface AnswerMode {
 }
 
 export interface MediaItem {
-  medium: 'image' | 'video' | string;
+  medium: "image" | "video" | string;
   image?: string;
   image_width?: number;
   image_height?: number;
@@ -111,12 +109,12 @@ export interface PlanStepBase {
 }
 
 export interface InitialQueryStep extends PlanStepBase {
-  step_type: 'INITIAL_QUERY';
+  step_type: "INITIAL_QUERY";
   initial_query_content: { query: string };
 }
 
 export interface SearchWebStep extends PlanStepBase {
-  step_type: 'SEARCH_WEB';
+  step_type: "SEARCH_WEB";
   search_web_content: {
     goal_id?: string;
     queries: Array<{ engine?: string; query: string; limit?: number }>;
@@ -124,14 +122,18 @@ export interface SearchWebStep extends PlanStepBase {
 }
 
 export interface SearchResultsStep extends PlanStepBase {
-  step_type: 'SEARCH_RESULTS';
+  step_type: "SEARCH_RESULTS";
   web_results_content: {
     goal_id?: string;
     web_results: WebResultItem[];
   };
 }
 
-export type PlanStep = InitialQueryStep | SearchWebStep | SearchResultsStep | PlanStepBase;
+export type PlanStep =
+  | InitialQueryStep
+  | SearchWebStep
+  | SearchResultsStep
+  | PlanStepBase;
 
 export interface PlanGoal {
   id: string;
@@ -177,22 +179,22 @@ export interface AskTextBlockWrapper extends BlockBase {
 
 // Concrete block types (discriminated by `intended_usage`) for safer access
 export interface ProSearchStepsBlock extends BlockBase {
-  intended_usage: 'pro_search_steps';
+  intended_usage: "pro_search_steps";
   plan_block: PlanBlock;
 }
 
 export interface PlanBlockType extends BlockBase {
-  intended_usage: 'plan';
+  intended_usage: "plan";
   plan_block: PlanBlock;
 }
 
 export interface WebResultsBlock extends BlockBase {
-  intended_usage: 'web_results';
+  intended_usage: "web_results";
   web_result_block: WebResultBlock;
 }
 
 export interface AskTextBlock {
-  intended_usage: 'ask_text';
+  intended_usage: "ask_text";
   markdown_block: MarkdownBlock;
 }
 
@@ -201,7 +203,13 @@ export interface GenericBlock extends BlockBase {
   [k: string]: any;
 }
 
-export type Block = ProSearchStepsBlock | PlanBlockType | WebResultsBlock | AskTextBlock | AskTextBlockWrapper | GenericBlock;
+export type Block =
+  | ProSearchStepsBlock
+  | PlanBlockType
+  | WebResultsBlock
+  | AskTextBlock
+  | AskTextBlockWrapper
+  | GenericBlock;
 
 export interface PerplexityResponse {
   backend_uuid?: ID;
@@ -284,54 +292,90 @@ export interface PerplexityChunk {
 }
 
 // Exporting for usage across the client implementation
-export { };
+export {};
 
 // Exported type-guard helpers so consumers don't need to write them.
 export function isAskTextBlock(b: Block | undefined | null): b is AskTextBlock {
-  return !!b && (b as any).intended_usage === 'ask_text' && !!(b as any).markdown_block;
+  return (
+    !!b &&
+    (b as any).intended_usage === "ask_text" &&
+    !!(b as any).markdown_block
+  );
 }
 
-export function isWebResultsBlock(b: Block | undefined | null): b is WebResultsBlock {
-  return !!b && (b as any).intended_usage === 'web_results' && !!(b as any).web_result_block;
+export function isWebResultsBlock(
+  b: Block | undefined | null
+): b is WebResultsBlock {
+  return (
+    !!b &&
+    (b as any).intended_usage === "web_results" &&
+    !!(b as any).web_result_block
+  );
 }
 
 export function isPlanBlock(b: Block | undefined | null): b is PlanBlockType {
-  return !!b && (b as any).intended_usage === 'plan' && !!(b as any).plan_block;
+  return !!b && (b as any).intended_usage === "plan" && !!(b as any).plan_block;
 }
 
-export function isProSearchStepsBlock(b: Block | undefined | null): b is ProSearchStepsBlock {
-  return !!b && (b as any).intended_usage === 'pro_search_steps' && !!(b as any).plan_block;
+export function isProSearchStepsBlock(
+  b: Block | undefined | null
+): b is ProSearchStepsBlock {
+  return (
+    !!b &&
+    (b as any).intended_usage === "pro_search_steps" &&
+    !!(b as any).plan_block
+  );
 }
+
+/**
+ * getAskTextBlocks(result)
+ *
+ * Convenience helper to extract ask_text blocks from a PerplexityResponse.
+ */
 
 // Convenience helpers that operate on a full PerplexityResponse
 // and return typed blocks or extracted text/answers.
-export function getAskTextBlocks(result: PerplexityResponse | null | undefined): AskTextBlock[] {
+export function getAskTextBlocks(
+  result: PerplexityResponse | null | undefined
+): AskTextBlock[] {
   if (!result || !Array.isArray(result.blocks)) return [];
   return result.blocks.filter(isAskTextBlock) as AskTextBlock[];
 }
 
-export function getFirstAskTextAnswer(result: PerplexityResponse | null | undefined): string | undefined {
+export function getFirstAskTextAnswer(
+  result: PerplexityResponse | null | undefined
+): string | undefined {
   const blocks = getAskTextBlocks(result);
   if (!blocks.length) return undefined;
   const md = blocks[0].markdown_block;
   if (md.answer) return md.answer;
   // fallback: join normalized chunks
-  const chunks = Array.isArray(md.chunks) ? md.chunks : (md.chunks ? [md.chunks] : []);
-  if (chunks.length) return chunks.join('');
+  const chunks = Array.isArray(md.chunks)
+    ? md.chunks
+    : md.chunks
+    ? [md.chunks]
+    : [];
+  if (chunks.length) return chunks.join("");
   return undefined;
 }
 
-export function getWebResultsBlocks(result: PerplexityResponse | null | undefined): WebResultsBlock[] {
+export function getWebResultsBlocks(
+  result: PerplexityResponse | null | undefined
+): WebResultsBlock[] {
   if (!result || !Array.isArray(result.blocks)) return [];
   return result.blocks.filter(isWebResultsBlock) as WebResultsBlock[];
 }
 
-export function getPlanBlocks(result: PerplexityResponse | null | undefined): PlanBlockType[] {
+export function getPlanBlocks(
+  result: PerplexityResponse | null | undefined
+): PlanBlockType[] {
   if (!result || !Array.isArray(result.blocks)) return [];
   return result.blocks.filter(isPlanBlock) as PlanBlockType[];
 }
 
-export function getProSearchStepsBlocks(result: PerplexityResponse | null | undefined): ProSearchStepsBlock[] {
+export function getProSearchStepsBlocks(
+  result: PerplexityResponse | null | undefined
+): ProSearchStepsBlock[] {
   if (!result || !Array.isArray(result.blocks)) return [];
   return result.blocks.filter(isProSearchStepsBlock) as ProSearchStepsBlock[];
 }

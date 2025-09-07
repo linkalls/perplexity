@@ -43,6 +43,16 @@ The `sample/` folder contains example scripts (`sample/index.ts`, `sample/stream
 - `src/driver.ts` - Browser automation stub
 - `src/search_helpers.ts`, `src/types.ts` - Utilities and type definitions
 
+## Public API (exports)
+
+- `PerplexityClient` - main synchronous client for search and streaming.
+- `PerplexityAsyncClient` - async-initializing wrapper for environments that prefer lazy init.
+- `LabsClient` - experimental websocket-based Labs client.
+- `Emailnator` - helper to generate temp emails and poll messages.
+- `Driver` - automation stub for browser-based flows (Playwright required for full functionality).
+- helper functions from `src/search_helpers.ts` (e.g. `parseCookieEnv`, `computeModelPreference`, `uploadFiles`).
+- types and helpers from `src/types.ts` (e.g. `PerplexityResponse`, `PerplexityChunk`, `getFirstAskTextAnswer`).
+
 ## Notes
 
 - By default the client makes anonymous (unauthenticated) requests to the public endpoint. For production use, configure cookies or tokens appropriately.

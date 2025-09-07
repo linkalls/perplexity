@@ -10,10 +10,9 @@ async function main() {
   // and produce a Record<string,string> for the client constructor.
   const parsedCookies = parseCookieEnv(process.env.PERPLEXITY_COOKIE);
   const cli = new PerplexityClient(parsedCookies);
-  console.log('parsed cookies:', parsedCookies);
   try {
     console.log('\nStreaming example (listening in chunks):');
-    const gen = await cli.asyncSearch('ストリーミングで自己紹介して', 'pro', null, ['web'], {}, 'ja-JP');
+    const gen = await cli.asyncSearch('ストリーミングで自己紹介して', 'pro', null, ['web'], {}, 'ja-JP',{},true);
 
     // 1 回の走査でテキスト断片と backend_uuid を同時に取得する
     let backend_uuid: string | undefined;
@@ -25,7 +24,7 @@ async function main() {
     if (backend_uuid) {
       console.log('captured backend_uuid:', backend_uuid);
       const follow = { backend_uuid, attachments: [] };
-      const second = await cli.search('この会話の続きで質問します: 私の好きな色は？', 'pro', null, ['web'], {}, 'ja-JP', follow);
+      const second = await cli.search('この会話の続きで質問します: 私の好きな色は？', 'pro', null, ['web'], {}, 'ja-JP', follow,true);
       console.log('Follow display_model:', second.display_model);
       console.log('Follow backend_uuid:', second.backend_uuid);
       console.log('Follow answer:', getFirstAskTextAnswer(second));
