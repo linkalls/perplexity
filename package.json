@@ -16,7 +16,7 @@
     "url": "https://github.com/linkalls/perplexity.git"
   },
   "scripts": {
-    "sample": "node --enable-source-maps ./sample/index.js",
+    "sample": "bun --enable-source-maps ./sample/index.js",
     "build": "tsc -p .",
     "prepare": "echo 'No build required for JSR publication (TypeScript source published)'"
   }

@@ -54,6 +54,22 @@ The `sample/` folder contains example scripts (`sample/index.ts`, `sample/stream
 - Types live in `src/types.ts`. Run type checks when updating public types.
 - After changes, build and run the provided samples to verify behavior.
 
+## Disclaimer / 免責事項
+
+English:
+
+- This project is an independent, community-provided client for the publicly observed Perplexity.ai SSE endpoint. It is not affiliated with, endorsed by, or maintained by Perplexity.ai.
+- Use of the client may be subject to Perplexity.ai's terms of service and rate limits; you are responsible for ensuring your usage complies with those terms and applicable laws.
+- The code is provided "as-is" without warranties. The author(s) are not responsible for data loss, account suspension, or other consequences arising from using this software.
+- Do not include secrets, private keys, or sensitive personal data when sending queries. If you provide cookies for authenticated requests, handle them securely and avoid committing them to source control.
+
+日本語:
+
+- 本プロジェクトは Perplexity.ai とは無関係のコミュニティ提供クライアントです。Perplexity.ai の公式プロダクトやサポートを意味するものではありません。
+- 本クライアントの利用は Perplexity.ai の利用規約やレート制限の対象となる可能性があります。利用に際しては利用規約や法令を遵守してください。
+- 本ソフトウェアは現状のまま提供され、いかなる保証もありません。本ソフトウェアの使用により発生したデータ損失、アカウント停止、その他の影響について作者は責任を負いません。
+- 認証用クッキーや秘密情報、個人の機密データは送信しないでください。認証情報を利用する場合は安全に管理し、ソース管理に含めないでください。
+
 ## License
 
 MIT
