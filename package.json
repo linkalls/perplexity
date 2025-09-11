@@ -19,5 +19,8 @@
     "sample": "bun --enable-source-maps ./sample/index.js",
     "build": "tsc -p .",
     "prepare": "echo 'No build required for JSR publication (TypeScript source published)'"
+  },
+  "dependencies": {
+    "patchright": "^1.55.1"
   }
 }

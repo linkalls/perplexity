@@ -26,7 +26,8 @@ async function useProQueriesForClient(
 
 async function main() {
   const emailnatorCookies = parseCookieEnv(process.env.EMAILNATOR_COOKIE);
-  const parsedPerplexityCookies = parseCookieEnv(process.env.PERPLEXITY_COOKIE);
+  // Do NOT use user's personal Perplexity cookies here — create a fresh, empty client
+  // so the script will create and sign into newly generated accounts.
   const maxAccounts = Number(process.env.MAX_ACCOUNTS || "2");
   const queriesPerAccount = Number(process.env.QUERIES_PER_ACCOUNT || "5");
 
@@ -45,8 +46,8 @@ async function main() {
 
   while (accountsCreated < maxAccounts) {
     console.log("\n=== Creating new account (emailnator) ===");
-    // pass existing perplexity cookies if any (useful for debugging)
-    const cli = new PerplexityClient(parsedPerplexityCookies);
+    // initialize client without the user's cookies so we don't reuse personal auth
+    const cli = new PerplexityClient({});
 
     // try createAccount with a few retries because email delivery can be flaky
     let created = false;

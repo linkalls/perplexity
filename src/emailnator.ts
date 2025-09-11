@@ -67,9 +67,22 @@ export class Emailnator {
       body: JSON.stringify(body),
     });
     const text = await res.text();
+    // Debug: if this is the message-list endpoint, log the full response for diagnosis
+    try {
+      if (url.includes("message-list")) {
+        try {
+          console.log("Emailnator message-list response (full):", text);
+        } catch (e) {
+          // ignore logging errors
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
     try {
       return JSON.parse(text);
     } catch (e) {
+      // return raw text but include a debug hint
       return text;
     }
   }
@@ -93,7 +106,8 @@ export class Emailnator {
     if (dot) data.email.push("dotGmail");
     if (google_mail) data.email.push("googleMail");
 
-    // call until we receive an email
+    // call until we receive an email (with a safety timeout)
+    const start = Date.now();
     for (;;) {
       const resp = await this.postJSON(
         "https://www.emailnator.com/generate-email",
@@ -102,6 +116,9 @@ export class Emailnator {
       if (resp && resp.email && resp.email.length) {
         this.email = resp.email[0];
         break;
+      }
+      if ((Date.now() - start) / 1000 > 30) {
+        throw new Error("timeout waiting for email generation from Emailnator");
       }
       // small delay
       await new Promise((r) => setTimeout(r, 500));
@@ -193,6 +210,106 @@ export class Emailnator {
     const target = msgs ?? this.inbox;
     for (const m of target) if (func(m)) return m;
     return undefined;
+  }
+
+  /**
+   * Find a message by subject. `pattern` can be a string or RegExp.
+   * If string, matches exact subject or substring.
+   */
+  findBySubject(pattern: string | RegExp, msgs?: any[]): any | undefined {
+    const matcher = (m: any) => {
+      const s = m && (m.subject || "");
+      if (typeof pattern === "string")
+        return s === pattern || s.includes(pattern);
+      try {
+        return pattern.test(s);
+      } catch (e) {
+        return false;
+      }
+    };
+    return this.get(matcher, msgs);
+  }
+
+  /**
+   * Find a message by From/sender. `pattern` can be a string or RegExp.
+   * If string, matches exact `from` field or substring; also checks common header fields.
+   */
+  findByFrom(pattern: string | RegExp, msgs?: any[]): any | undefined {
+    const matcher = (m: any) => {
+      const candidates = [
+        m && (m.from || ""),
+        m && (m.sender || ""),
+        m && (m.mail_from || ""),
+      ];
+      for (const c of candidates) {
+        if (!c) continue;
+        if (
+          typeof pattern === "string" &&
+          (c === pattern || c.includes(pattern))
+        )
+          return true;
+        if (pattern instanceof RegExp) {
+          try {
+            if (pattern.test(c)) return true;
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+      return false;
+    };
+    return this.get(matcher, msgs);
+  }
+
+  /**
+   * Build a mailbox URL like:
+   *  https://www.emailnator.com/mailbox/{email}/{messageIdBase64}
+   * If messageId looks like raw text it will be base64-encoded.
+   */
+  static makeMailboxUrl(email: string, messageId?: string): string {
+    const encEmail = encodeURIComponent(email);
+    let idPart = "";
+    if (messageId) {
+      const isBase64 =
+        /^[A-Za-z0-9+/=]+$/.test(messageId) && messageId.length % 4 === 0;
+      idPart =
+        "/" +
+        (isBase64 ? messageId : Buffer.from(messageId).toString("base64"));
+    }
+    return `https://www.emailnator.com/mailbox/${encEmail}${idPart}`;
+  }
+
+  /**
+   * Parse a mailbox URL and return { email, messageId, messageIdDecoded } or null on error.
+   */
+  static parseMailboxUrl(
+    url: string
+  ): { email: string; messageId?: string; messageIdDecoded?: string } | null {
+    try {
+      const u = new URL(url);
+      const parts = u.pathname.split("/").filter(Boolean); // ['mailbox','email','id']
+      if (parts[0] !== "mailbox") return null;
+      const email = decodeURIComponent(parts[1] || "");
+      const messageId = parts[2] || undefined;
+      let messageIdDecoded: string | undefined = undefined;
+      if (messageId) {
+        try {
+          messageIdDecoded = Buffer.from(messageId, "base64").toString("utf8");
+        } catch (e) {
+          // ignore decode errors
+        }
+      }
+      return { email, messageId, messageIdDecoded };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Instance helper to build a mailbox URL for the current `this.email`.
+   */
+  makeMailboxUrl(messageId?: string): string {
+    return Emailnator.makeMailboxUrl(this.email, messageId);
   }
 }
 

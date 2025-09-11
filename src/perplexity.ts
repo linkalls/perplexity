@@ -1,5 +1,6 @@
 import type { PerplexityResponse, PerplexityChunk, Models } from "./types";
 import Emailnator from "./emailnator";
+import Driver from "./driver";
 import {
   ensureSearchArgs,
   uploadFiles,
@@ -114,6 +115,24 @@ export class PerplexityClient {
     > {
       const collected: PerplexityChunk[] = [];
       for await (const chunk of self.sseStream(res)) {
+        // If backend explicitly signals rate limiting or failure, abort immediately
+        try {
+          const ec = (chunk as any)?.error_code;
+          const st = (chunk as any)?.status;
+          if (ec === "RATE_LIMITED" || st === "failed") {
+            const reason =
+              (chunk as any)?._response_type || ec || st || "request failed";
+            const text =
+              (chunk as any)?.text || (chunk as any)?.message || undefined;
+            const msg = `Perplexity API error: ${String(reason)}${
+              text ? ` - ${JSON.stringify(text)}` : ""
+            }`;
+            throw new Error(msg);
+          }
+        } catch (e) {
+          // rethrow any detection errors as proper failures
+          throw e;
+        }
         // normalize chunk.text to array for easier downstream merging
         if (chunk.text && typeof chunk.text === "string")
           chunk.text = [chunk.text];
@@ -240,6 +259,167 @@ export class PerplexityClient {
     }
 
     return headers;
+  }
+
+  // Browser-based signin method (learned from MCP Playwright session)
+  private async performBrowserSignin(
+    email: string
+  ): Promise<{ success: boolean; token?: string }> {
+    try {
+      const drv = new Driver();
+      console.log("Attempting browser-based signin for:", email);
+
+      // Initialize browser using patchright
+      await drv.initBrowser();
+
+      // Navigate to signin page
+      await drv.page.goto("https://www.perplexity.ai/auth/signin");
+      await new Promise((r) => setTimeout(r, 2000));
+
+      // Find email input and enter email
+      const emailInput = await drv.page.$(
+        'input[type="email"], input[name="email"], input[placeholder*="email" i]'
+      );
+      if (!emailInput) {
+        console.warn("Email input not found on signin page");
+        await drv.closeBrowser();
+        return { success: false };
+      }
+
+      await emailInput.clear();
+      await emailInput.fill(email);
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Find and click signin button (multiple possible selectors)
+      const submitBtn = await drv.page.$(
+        'button[type="submit"], button:has-text("Sign in"), button:has-text("Continue"), button:has-text("Send"), .submit-button, [data-testid="submit"]'
+      );
+      if (!submitBtn) {
+        console.warn("Submit button not found on signin page");
+        await drv.closeBrowser();
+        return { success: false };
+      }
+
+      await submitBtn.click();
+      await new Promise((r) => setTimeout(r, 5000)); // Increased wait time
+
+      // Check if we were redirected to verify-request page
+      const currentUrl = drv.page.url();
+      if (
+        currentUrl.includes("verify-request") ||
+        currentUrl.includes("check-email") ||
+        currentUrl.includes("signin-email-sent")
+      ) {
+        console.log("Successfully submitted signin request via browser");
+        await drv.closeBrowser();
+        return { success: true };
+      }
+
+      console.warn("Unexpected page after signin submission:", currentUrl);
+      await drv.closeBrowser();
+      return { success: false };
+    } catch (e) {
+      console.warn("Browser signin failed:", e);
+      return { success: false };
+    }
+  }
+
+  // Complete signin using token via browser automation (learned from MCP Playwright)
+  private async completeBrowserSignin(
+    token: string,
+    email: string
+  ): Promise<{ success: boolean }> {
+    try {
+      const drv = new Driver();
+      console.log("Attempting to complete signin with token:", token);
+
+      // Initialize browser using patchright
+      await drv.initBrowser();
+
+      // Construct callback URL with token (pattern learned from MCP session)
+      const callbackUrl = `https://www.perplexity.ai/api/auth/callback/email?callbackUrl=https%3A%2F%2Fwww.perplexity.ai%2F&token=${token}&email=${encodeURIComponent(
+        email
+      )}`;
+
+      // Navigate to callback URL
+      await drv.page.goto(callbackUrl);
+      await new Promise((r) => setTimeout(r, 8000)); // Increased wait time for full authentication
+
+      // Check if successfully redirected to main page (multiple success indicators)
+      const currentUrl = drv.page.url();
+      const pageContent = await drv.page.content();
+
+      // Look for Pro features or account indicators (learned from MCP session)
+      const isAuthenticated =
+        currentUrl.includes("perplexity.ai") &&
+        !currentUrl.includes("signin") &&
+        !currentUrl.includes("verify-request") &&
+        (pageContent.includes("今日残り") || // Japanese Pro features
+          pageContent.includes("file upload") ||
+          pageContent.includes("Pro") ||
+          pageContent.includes("account"));
+
+      if (isAuthenticated) {
+        // Extract cookies for persistent session
+        const cookies = await drv.page.context().cookies();
+        for (const cookie of cookies) {
+          if (cookie.domain.includes("perplexity.ai")) {
+            this.cookies[cookie.name] = cookie.value;
+          }
+        }
+
+        console.log("Successfully completed signin and extracted cookies");
+        console.log("Found Pro features:", pageContent.includes("今日残り"));
+        await drv.closeBrowser();
+        return { success: true };
+      }
+
+      console.warn(
+        "Token signin did not redirect to expected page:",
+        currentUrl
+      );
+      await drv.closeBrowser();
+      return { success: false };
+    } catch (e) {
+      console.warn("Browser token signin failed:", e);
+      return { success: false };
+    }
+  }
+
+  // Enhanced CSRF token retrieval based on learned patterns
+  private async getCsrfToken(): Promise<string> {
+    // First try to get from existing cookies (next-auth format)
+    const rawCsrf = this.cookies["next-auth.csrf-token"] || "";
+    if (rawCsrf) {
+      try {
+        const dec = decodeURIComponent(String(rawCsrf));
+        // next-auth stores token as "token|hash"; prefer the token part
+        return (dec.split("|")[0] || dec.split("%7C")[0] || dec) as string;
+      } catch (e) {
+        const fallback =
+          String(rawCsrf).split("|")[0] ||
+          String(rawCsrf).split("%7C")[0] ||
+          String(rawCsrf);
+        if (fallback) return fallback;
+      }
+    }
+
+    // If not found in cookies, try fetching from the CSRF endpoint
+    try {
+      const response = await fetch(this.base + "/api/auth/csrf", {
+        headers: this.buildHeaders({ accept: "application/json" }),
+      });
+      if (response && response.ok) {
+        const data = await response.json();
+        if (data && data.csrfToken) {
+          return String(data.csrfToken);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch CSRF token from endpoint:", e);
+    }
+
+    return "";
   }
 
   // low-dependency mime guessing for common extensions
@@ -386,6 +566,19 @@ export class PerplexityClient {
     // non-stream: collect all chunks, merge them, and return an aggregated final response
     const collected: PerplexityChunk[] = [];
     for await (const chunk of this.sseStream(res)) {
+      // detect explicit backend errors (rate limit / failed status)
+      const ec = (chunk as any)?.error_code;
+      const st = (chunk as any)?.status;
+      if (ec === "RATE_LIMITED" || st === "failed") {
+        const reason =
+          (chunk as any)?._response_type || ec || st || "request failed";
+        const text =
+          (chunk as any)?.text || (chunk as any)?.message || undefined;
+        const msg = `Perplexity API error: ${String(reason)}${
+          text ? ` - ${JSON.stringify(text)}` : ""
+        }`;
+        throw new Error(msg);
+      }
       collected.push(chunk);
       // detect final SSE message
       if (chunk && (chunk.final === true || chunk.final_sse_message === true)) {
@@ -503,37 +696,31 @@ export class PerplexityClient {
     await en.initGenerate();
     console.log("Emailnator generated address:", en.email);
 
-    // ensure we have a CSRF token (try cookies first, then fetch endpoint)
-    let csrfToken =
-      (this.cookies["next-auth.csrf-token"] || "").split("%")[0] || "";
-    if (!csrfToken) {
-      try {
-        const cRes = await fetch(this.base + "/api/auth/csrf", {
-          headers: this.buildHeaders(),
-        });
-        if (cRes.ok) {
-          const cj = await cRes.json().catch(() => null);
-          csrfToken =
-            cj && (cj.csrfToken || cj.csrf_token)
-              ? cj.csrfToken || cj.csrf_token
-              : csrfToken;
-          console.log(
-            "Fetched CSRF token from /api/auth/csrf:",
-            csrfToken ? "[redacted]" : "(none)"
-          );
-        } else {
-          console.warn("/api/auth/csrf responded with status", cRes.status);
-        }
-      } catch (e) {
-        console.warn("Failed to fetch CSRF token:", e);
-      }
+    // Enhanced CSRF token retrieval based on learned patterns
+    let csrfToken = await this.getCsrfToken();
+
+    if (csrfToken) {
+      console.log("Using csrf token prefix:", csrfToken.slice(0, 12) + "...");
+    } else {
+      console.warn("No CSRF token available - proceeding anyway");
     }
 
-    // request signin link with retry/backoff for rate limits (429)
+    // Use browser automation for signin (learned from MCP Playwright session)
     const maxAttempts = 6;
     let initResp: Response | null = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
+        // Try browser automation first for more reliable signin
+        const browserSignin = await this.performBrowserSignin(en.email);
+        if (browserSignin.success) {
+          // Browser signin succeeded, continue with email polling
+          console.log("Browser signin completed successfully");
+          break;
+        } else {
+          console.warn("Browser signin failed, attempting API fallback");
+        }
+
+        // Fallback to API call if browser method fails
         initResp = await fetch(this.base + "/api/auth/signin/email", {
           method: "POST",
           headers: this.buildHeaders({
@@ -546,27 +733,70 @@ export class PerplexityClient {
             json: "true",
           }).toString(),
         });
+        // debug: capture response body snippet to help diagnose delivery issues
+        try {
+          const txt = await initResp
+            .clone()
+            .text()
+            .catch(() => "<no-body>");
+          console.log("signin init response:", {
+            status: initResp.status,
+            ok: initResp.ok,
+            body_snippet: String(txt).slice(0, 400),
+          });
+          // Detect Cloudflare / JS challenge pages and attempt interactive fallback
+          try {
+            const bodyLower = String(txt || "").toLowerCase();
+            if (
+              bodyLower.includes("just a moment") ||
+              bodyLower.includes("enable javascript and cookies") ||
+              bodyLower.includes("_cf_chl_opt") ||
+              bodyLower.includes("cdn-cgi/challenge-platform")
+            ) {
+              console.error(
+                "Detected Cloudflare-like challenge page in signin response. This request requires a real browser (JS + cookies) to complete."
+              );
+              // attempt interactive fallback using Driver
+              try {
+                const drv = new Driver();
+                console.log(
+                  "Attempting interactive signin via Driver.performInteractiveSignin()..."
+                );
+                const cookies = await drv.performInteractiveSignin({
+                  chromeDataDir: process.env.CHROME_USER_DATA_DIR,
+                });
+                if (cookies) {
+                  // merge cookies into this.cookies and retry
+                  this.cookies = { ...(this.cookies || {}), ...cookies };
+                  console.log(
+                    "Merged cookies from interactive signin; retrying signin flow."
+                  );
+                  initResp = null;
+                  await new Promise((r) => setTimeout(r, 1000));
+                  continue;
+                } else {
+                  throw new Error(
+                    "Interactive signin did not produce Perplexity cookies"
+                  );
+                }
+              } catch (e) {
+                // propagate to outer handler
+                throw e;
+              }
+            }
+          } catch (e) {
+            // if detection throws, rethrow to abort outer flow
+            throw e;
+          }
+        } catch (e) {
+          // ignore logging errors
+        }
       } catch (e) {
         console.warn("signin request network error (attempt", attempt, "):", e);
       }
-
       if (!initResp) {
         // small backoff and retry
         await new Promise((r) => setTimeout(r, 1000 * attempt));
-        continue;
-      }
-
-      if (initResp.status === 429) {
-        const txt = await initResp.text().catch(() => "<no-body>");
-        console.warn(
-          "signin rate-limited (429), attempt",
-          attempt,
-          "body:",
-          txt
-        );
-        // try to read suggested wait time in message, otherwise exponential backoff
-        const waitMs = 60 * 1000 * (attempt === 1 ? 1 : attempt); // escalate wait
-        await new Promise((r) => setTimeout(r, waitMs));
         continue;
       }
 
@@ -602,40 +832,152 @@ export class PerplexityClient {
       throw new Error("signin request failed");
     }
 
-    // wait for email
-    // give more time for the signin email to arrive (some providers are slow)
-    const new_msgs = await en.reload({
-      wait: true,
-      wait_for: (m: any) => m.subject === "Sign in to Perplexity",
-      timeout: 60,
-    });
-    if (!new_msgs) {
-      console.error(
-        "No new messages arrived. inbox length:",
-        en.inbox?.length ?? 0,
-        "inbox_ads length:",
-        en.inbox_ads?.length ?? 0
-      );
-      throw new Error("no signin email");
+    // Debug: fetch the public mailbox page HTML to see if messages are visible
+    try {
+      const mailboxUrl = en.makeMailboxUrl();
+      const mbResp = await fetch(mailboxUrl, {
+        headers: this.buildHeaders({ accept: "text/html" }),
+      });
+      const mbText = await mbResp.text().catch(() => "<no-body>");
+      console.log("Mail box page snippet:", String(mbText).slice(0, 800));
+    } catch (e) {
+      console.warn("Failed to fetch mailbox page for debug:", e);
     }
 
-    const msg = en.get((x: any) => x.subject === "Sign in to Perplexity");
-    const content = await en.open(msg.messageID);
+    // wait for email
+    // give more time for the signin email to arrive (some providers are slow)
+    // wait for a signin message — be tolerant: some providers change subject or sender
+    const new_msgs = await en.reload({
+      wait: true,
+      // Accept subjects that mention 'perplexity' (case-insensitive) or exact match
+      wait_for: (m: any) =>
+        !!(
+          m &&
+          ((m.subject && /perplexity/i.test(m.subject)) ||
+            m.subject === "Sign in to Perplexity")
+        ),
+      // increase timeout for slower delivery
+      timeout: 120,
+    });
+    if (!new_msgs) {
+      // First attempt yielded nothing — try resending the signin init once.
+      console.warn(
+        "No signin email arrived on first attempt; attempting single resend of signin request..."
+      );
+      try {
+        await fetch(this.base + "/api/auth/signin/email", {
+          method: "POST",
+          headers: this.buildHeaders({
+            "content-type": "application/x-www-form-urlencoded",
+          }),
+          body: new URLSearchParams({
+            email: en.email,
+            csrfToken: csrfToken || "",
+            callbackUrl: "https://www.perplexity.ai/",
+            json: "true",
+          }).toString(),
+        });
+      } catch (e) {
+        console.warn("Resend signin request failed:", e);
+      }
+
+      // brief backoff then poll inbox again with a shorter timeout
+      await new Promise((r) => setTimeout(r, 3000));
+      const retry_msgs = await en
+        .reload({ wait: true, timeout: 60 })
+        .catch(() => undefined);
+      if (!retry_msgs || retry_msgs.length === 0) {
+        // attempt a non-wait reload to capture current mailbox state for debugging
+        const current = await en.reload({ wait: false }).catch(() => undefined);
+        console.error(
+          "No new messages arrived after resend. inbox length:",
+          en.inbox?.length ?? 0,
+          "inbox_ads length:",
+          en.inbox_ads?.length ?? 0
+        );
+        console.error(
+          "Mailbox snapshot (for diagnosis):",
+          JSON.stringify(
+            {
+              latest_list: current
+                ? Array.isArray(current)
+                  ? current.slice(0, 10)
+                  : current
+                : null,
+              inbox: en.inbox ? en.inbox.slice(0, 10) : null,
+              inbox_ads: en.inbox_ads ? en.inbox_ads.slice(0, 10) : null,
+            },
+            null,
+            2
+          )
+        );
+        throw new Error("no signin email");
+      }
+      // continue with retry_msgs by treating them as the messages we received
+      // (the later selection and processing will find the correct message)
+    }
+
+    // Prefer an exact-subject match, but fall back to fuzzy subject match or first new message
+    let msg =
+      en.get((x: any) => x.subject === "Sign in to Perplexity") ||
+      en.findBySubject(/perplexity/i) ||
+      en.get((x: any) => !!x.subject) ||
+      en.inbox[0];
+
+    if (!msg) {
+      console.error("No suitable message found in inbox", {
+        inbox_len: en.inbox?.length ?? 0,
+        inbox_sample: en.inbox?.slice(0, 5) ?? null,
+      });
+      throw new Error("signin message not found");
+    }
+
+    let content = "";
+    try {
+      content = await en.open(
+        msg.messageID || (msg as any).messageID || msg.messageId
+      );
+    } catch (e) {
+      console.error("Failed to open message for id", msg, e);
+      throw new Error("failed to open signin email");
+    }
 
     // Try several strategies to locate the signin callback URL in the email
-    // - unescape common HTML entities
-    // - look for a quoted URL, an href= attribute, or any raw URL containing the callback path
+    // Enhanced pattern matching based on MCP Playwright learnings (nb3bp-asxab style tokens)
     const unescaped = String(content)
       .replace(/&quot;|&#34;/g, '"')
       .replace(/&amp;/g, "&")
       .replace(/&#39;/g, "'");
 
+    // Extract token directly from email content (learned pattern: nb3bp-asxab)
+    const tokenMatch = /\b([a-z0-9]{5}-[a-z0-9]{5})\b/i.exec(unescaped);
+    if (tokenMatch) {
+      const token = tokenMatch[1];
+      console.log("Found signin token in email:", token);
+
+      // Try to use browser automation to complete signin with token
+      try {
+        const browserResult = await this.completeBrowserSignin(token, en.email);
+        if (browserResult.success) {
+          console.log("Successfully completed signin via browser automation");
+          this.copilot = 5;
+          this.file_upload = 10;
+          return true;
+        }
+      } catch (e) {
+        console.warn(
+          "Browser token signin failed, falling back to URL method:",
+          e
+        );
+      }
+    }
+
     const reQuoted =
       /"(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?callbackUrl=[^"]+)"/;
     const reHref =
-      /href=['"]?(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?[^'"\s>]+)/i;
+      /href=['"]?(https?:\/\/[^'"\s>]*api\/auth\/callback\/email\?[^'"\s>]+)/i;
     const reGeneric =
-      /(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?[^"'<>\s]+)/;
+      /(https?:\/\/[^"'<>\s]*api\/auth\/callback\/email\?[^"'<>\s]+)/;
 
     let m: RegExpExecArray | null =
       reQuoted.exec(unescaped) ||
@@ -665,7 +1007,12 @@ export class PerplexityClient {
     // ensure common HTML-escaped ampersands are unescaped in the URL
     link = String(link).replace(/&amp;/g, "&");
 
-    await fetch(link, { method: "GET", headers: this.buildHeaders() });
+    try {
+      await fetch(link, { method: "GET", headers: this.buildHeaders() });
+    } catch (e) {
+      console.error("Failed to fetch signin callback link", link, e);
+      throw new Error("failed to complete signin callback");
+    }
 
     this.copilot = 5;
     this.file_upload = 10;
