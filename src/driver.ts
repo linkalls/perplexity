@@ -246,7 +246,7 @@ export class Driver {
   }
 
   // interceptRequest attempts to mimic Python's Playwright route handler
-  async interceptRequest(route: any, request: any) {
+  async interceptRequest(route: any, request: any): Promise<void> {
     try {
       const url = request.url();
 
@@ -468,7 +468,7 @@ export class Driver {
    */
   async performInteractiveSignin(
     opts: { chromeDataDir?: string; timeoutSec?: number } = {}
-  ) {
+  ): Promise<Record<string, string> | null> {
     const timeout = (opts.timeoutSec ?? 180) * 1000;
     let playwright: any = null;
     try {

@@ -20,6 +20,8 @@ export type Models =
   | "gpt45"
   | "claude_sonnet_4_0"
   | "claude37sonnetthinking"
+  | "claude45sonnetthinking"
+  | "claude45"
   | "o3mini"
   | "gemini25pro"
   | "grok"

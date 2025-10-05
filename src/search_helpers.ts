@@ -193,6 +193,8 @@ export function buildModelPrefMap(): any {
       gpt45: "gpt45",
       claude_sonnet_4_0: "claude2",
       claude37sonnetthinking: "claude37sonnetthinking",
+      claude45sonnetthinking: "claude45sonnetthinking",
+      claude45: "claude45",
       o3mini: "o3mini",
       gemini25pro: "Gemini25Pro",
       grok: "grok",
@@ -541,4 +543,21 @@ export async function* extractStreamBackend(
       }
     }
   }
+}
+
+/**
+ * removeNumericCitations(text)
+ *
+ * Remove citation-like markers of the form "[3]", "[1][2]", "[3,4]" from
+ * a string. This only targets bracket groups that contain digits and common
+ * separators (commas, spaces, hyphens/en-dashes). Other bracketed content
+ * (e.g. "[Figure 1]") is preserved.
+ */
+export function removeNumericCitations(text: string): string {
+  if (!text) return text;
+  // Match one or more bracket groups containing only digits and optional
+  // separators like commas, spaces, hyphens or en-dashes. Examples matched:
+  // [3], [1][2], [3,4], [1-3], [1, 2, 3]
+  const re = /(?:\s*\[\s*\d+(?:\s*(?:,|\-|–)\s*\d+)*\s*\])+\s*/g;
+  return String(text).replace(re, "");
 }
