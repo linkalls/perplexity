@@ -1029,6 +1029,7 @@ export class PerplexityClient {
    */
   async getModels(): Promise<any> {
     const candidates = [
+      "/rest/models/config?config_schema=v1&version=2.18&source=default",
       "/api/search/models",
       "/rest/models",
       "/api/models",
