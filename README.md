@@ -1,267 +1,182 @@
-## English version
+# Perplexity Bun / TypeScript Client
 
-# Perplexity Bun / TypeScript client
+Bun-first TypeScript client for Perplexity's **unofficial web endpoints**.
+Search via SSE, stream partial answers, follow up in a thread, upload files,
+and inspect model IDs and their **config-advertised** Pro/Max requirements.
 
-This repository provides a lightweight TypeScript client for the public Perplexity.ai SSE endpoint. It is primarily intended for use with the Bun runtime but also works with Node.js.
+> 非公式クライアント。Perplexityが公開する正式なAPI SDKではなく、
+> Web内部のAPIに依存するため、通信仕様・モデル名・利用枠は予告なく変わる可能性がある。
 
-## Key points
+## Quick start / セットアップ
 
-- Includes utilities to receive and parse SSE (Server-Sent Events).
-- Offers a synchronous-style `PerplexityClient` and an async-initializing wrapper `PerplexityAsyncClient` (`src/perplexity_async.ts`).
-
-## Features (detailed)
-
-- Streaming SSE parsing utilities: low-level `sseStream` in `PerplexityClient` and high-level extractors `extractStreamEntries`, `extractStreamAnswers`, and `extractStreamBackend` for incremental consumption.
-- Non-stream aggregated search: `PerplexityClient.search` collects SSE chunks and returns a merged `PerplexityResponse`.
-- Streaming search: `PerplexityClient.asyncSearch` returns an async generator yielding `PerplexityChunk` pieces for real-time processing.
-- File uploads: `uploadFiles` helper to create an upload URL and upload files, returning attachment URLs for inclusion in a query.
-- Model selection helpers: `buildModelPrefMap` and `computeModelPreference` normalize friendly model names to canonical identifiers.
-- Cookie parsing: `parseCookieEnv` supports multiple cookie string formats for easy environment configuration.
-- Temporary email automation: `Emailnator` to generate and poll disposable inboxes for account creation flows.
-- Experimental Labs websocket client: `LabsClient` for low-latency streaming experiments using Socket.IO handshake.
-- Types and helpers: `src/types.ts` contains comprehensive types and type-guard helpers for safe response handling.
-
-## Quick start
-
-1. Install dependencies (this project assumes a `package.json` is present):
-
-```bash
-# With Bun
+~~~bash
+git clone https://github.com/linkalls/perplexity.git
+cd perplexity
 bun install
+bun run sample/models.ts
+bun test
+bun run build
+~~~
 
-# Or with npm
-npm install
-```
+No API key is required for reading the bundled model catalog. A successful
+live search may require authentication, a paid subscription, or working network
+access depending on the requested feature. Cloudflare can reject requests.
 
-2. Run a sample (Bun recommended):
+## Models and subscription plans / モデルと必要プラン
 
-```bash
-# Run a sample directly with Bun
-bun run sample/index.ts
+The catalog is built from a user-provided config_schema=v1 JSON snapshot captured
+**2026-11-19**, containing **166 registered model IDs** and **25 UI menu options**.
+A successful getModels() call updates the in-memory configuration; otherwise
+the bundled snapshot remains in use.
 
-# Or build and run with Node
-npm run build
-node ./dist/sample/index.js
-```
+- **models:** known IDs, their labels, providers, and modes. Listing an ID
+  does NOT mean it is selectable or available on your account.
+- **config:** selectable UI choices and their advertised subscription_tier
+  (typically pro or max), plus normal, thinking, and fast model variants.
+- **default_models:** service defaults by mode.
+- **computer_harness:** metadata for Computer/ASI orchestration presets.
 
-The `sample/` folder contains example scripts (`sample/index.ts`, `sample/stream.ts`, `sample/followup.ts`, `sample/probe_models.ts`).
+**subscriptionTier = null means UNKNOWN, not free.** The library reports
+the advertised plan attached to a UI option, NOT the user's actual subscription,
+remaining quota, or authorization to use a given model.
 
-## Main files
+~~~ts
+import { PerplexityClient } from "./src/index";
 
-- `src/perplexity.ts` - Core client (SSE parsing, etc.)
-- `src/perplexity_async.ts` - Async initialization wrapper
-- `src/labs.ts` - Client for Labs (e.g. Socket.IO)
-- `src/emailnator.ts` - Temporary email helper
-- `src/driver.ts` - Browser automation stub
-- `src/search_helpers.ts`, `src/types.ts` - Utilities and type definitions
+const client = new PerplexityClient();
 
-## Public API (exports)
+// Uses snapshot until a successful live fetch.
+const proSearch = client.getModelCatalog({
+  mode: "search",
+  selectableOnly: true,
+  subscriptionTier: "pro",
+});
+console.table(proSearch.map(({ label, id, subscriptionTier }) => ({
+  label, id, requiredPlan: subscriptionTier,
+})));
 
-- `PerplexityClient` - main synchronous client for search and streaming.
-- `PerplexityAsyncClient` - async-initializing wrapper for environments that prefer lazy init.
-- `LabsClient` - experimental websocket-based Labs client.
-- `Emailnator` - helper to generate temp emails and poll messages.
-- `Driver` - automation stub for browser-based flows (Playwright required for full functionality).
-- helper functions from `src/search_helpers.ts` (e.g. `parseCookieEnv`, `computeModelPreference`, `uploadFiles`).
-- types and helpers from `src/types.ts` (e.g. `PerplexityResponse`, `PerplexityChunk`, `getFirstAskTextAnswer`).
+// Live request is optional and can fail due to Cloudflare:
+await client.getModels();
+console.log("Catalog source:", client.modelConfigSource); // live | snapshot
 
-## Notes
+const info = client.getModelInfo("gpt6_2_sol");
+console.log(info?.subscriptionTier); // "pro" in provided snapshot
+~~~
 
-- By default the client makes anonymous (unauthenticated) requests to the public endpoint. For production use, configure cookies or tokens appropriately.
-- Network access is required (Perplexity API and related resources).
-- SSE streaming may be interrupted; implement reconnection and partial-receive handling in application code.
+### Representative model IDs from the snapshot
 
-## Development / Quality gates
+| Mode | Model | Server ID | Advertised tier |
+| --- | --- | --- | --- |
+| search | GPT-6.2 Sol | gpt6_2_sol | pro |
+| search | GPT-6.2 Sol Thinking | gpt6_2_sol_thinking | pro |
+| search | GPT-6.2 Astra | gpt6_2_astra | max |
+| search | GPT-6.2 Astra Thinking | gpt6_2_astra_thinking | max |
+| search | Claude Sonnet 5.5 | claude55sonnet | pro |
+| search | Claude Opus 5.5 | claude55opus | max |
+| asi | GPT-6.2 Astra Computer | pplx_asi_gpt_6_2_astra | pro |
 
-- Types live in `src/types.ts`. Run type checks when updating public types.
-- After changes, build and run the provided samples to verify behavior.
+Search and Computer/ASI can have different IDs and different UI plan labels
+for the same model family. **Do not send ASI/browser-agent IDs to search().**
+Those protocols are not implemented by this search client.
 
-## Disclaimer / 免責事項
+## Search and model selection / 検索とモデル指定
 
-English:
+~~~ts
+import { PerplexityClient } from "./src/index";
+import { parseCookieEnv } from "./src/search_helpers";
+import { getFirstAskTextAnswer } from "./src/types";
 
-- This project is an independent, community-provided client for the publicly observed Perplexity.ai SSE endpoint. It is not affiliated with, endorsed by, or maintained by Perplexity.ai.
-- Use of the client may be subject to Perplexity.ai's terms of service and rate limits; you are responsible for ensuring your usage complies with those terms and applicable laws.
-- The code is provided "as-is" without warranties. The author(s) are not responsible for data loss, account suspension, or other consequences arising from using this software.
-- Do not include secrets, private keys, or sensitive personal data when sending queries. If you provide cookies for authenticated requests, handle them securely and avoid committing them to source control.
+const cookies = parseCookieEnv(process.env.PERPLEXITY_COOKIE);
+const client = new PerplexityClient(cookies);
 
-日本語:
+// Ordinary search: returns an aggregated structured response.
+const response = await client.search(
+  "早稲田大学の公式ニュースを教えて",
+  "auto",
+  null,
+  ["web"],
+  {},
+  "ja-JP",
+);
+console.log(getFirstAskTextAnswer(response));
 
-- 本プロジェクトは Perplexity.ai とは無関係のコミュニティ提供クライアントです。Perplexity.ai の公式プロダクトやサポートを意味するものではありません。
-- 本クライアントの利用は Perplexity.ai の利用規約やレート制限の対象となる可能性があります。利用に際しては利用規約や法令を遵守してください。
-- 本ソフトウェアは現状のまま提供され、いかなる保証もありません。本ソフトウェアの使用により発生したデータ損失、アカウント停止、その他の影響について作者は責任を負いません。
-- 認証用クッキーや秘密情報、個人の機密データは送信しないでください。認証情報を利用する場合は安全に管理し、ソース管理に含めないでください。
+// With an authorized account, Pro search can use a model ID or UI label.
+// This example requires the required plan and a working web endpoint.
+// const pro = await client.search(
+//   "Bunのリリースを調べて",
+//   "pro",
+//   "gpt6_2_sol",
+//   ["web"],
+//   {},
+//   "ja-JP",
+// );
+~~~
 
-## License
+- Modes: auto, pro, reasoning, deep research.
+- Sources: web, scholar, social, finance.
+- An exact model ID is preserved; friendly labels are resolved from the UI
+  config (e.g. GPT-6.2 Sol => gpt6_2_sol).
+- With reasoning mode, friendly labels prefer a thinking model when available.
+- Unknown explicit model names **throw** instead of silently falling back.
+- Legacy names such as claude45 and Gemini25Pro are handled by aliases.
+- Model registrations are metadata, not a check that a search will succeed.
 
-MIT
+## Streaming / ストリーミング
 
----
+~~~ts
+import { PerplexityClient } from "./src/index";
 
-## 具体的なコード例 (日本語)
+const client = new PerplexityClient();
+const chunks = await client.asyncSearch(
+  "Bunについて簡潔に教えて",
+  "auto",
+  null,
+  ["web"],
+  {},
+  "ja-JP",
+);
 
-簡単な非ストリーミング検索の例（`sample/index.ts` を参照）:
-
-```ts
-import { PerplexityClient } from "@ptt/perplexity";
-
-async function main() {
-  const cli = new PerplexityClient();
-
-  // 非ストリーミング：最終的な集約レスポンスを取得
-  const result = await cli.search(
-    "今日のニュース",
-    "pro",
-    "claude37sonnetthinking",
-    ["web", "social"],
-    {},
-    "ja-JP"
-  );
-
-  console.log("blocks length:", result.blocks?.length ?? 0);
-  // ブロックを走査して安全に中身を取り出す
-  for (const block of result.blocks ?? []) {
-    console.log(block.intended_usage, block);
-  }
+for await (const chunk of chunks) {
+  console.log(chunk);
 }
+~~~
 
-main().catch(console.error);
-```
+For follow-up use the previous response's backend_uuid and
+sample/followup.ts. File upload and text-extraction helpers live in
+src/search_helpers.ts.
 
-ストリーミング（逐次受信）利用の例（`sample/stream.ts` を参照）:
+## Agent Skills and AGENTS.md / エージェント向け
 
-```ts
-import { PerplexityClient } from "@ptt/perplexity";
+Repository guidance for Codex and other agents:
+- [AGENTS.md](./AGENTS.md) describes project conventions, checks, and boundaries.
+- [perplexity-search skill](./.agents/skills/perplexity-search/SKILL.md)
+  explains integrating this library into a Bun/TypeScript agent.
+- [perplexity-model-catalog skill](./.agents/skills/perplexity-model-catalog/SKILL.md)
+  explains safe model catalog refresh and tier mapping.
 
-async function main() {
-  const cli = new PerplexityClient();
-  const gen = await cli.asyncSearch(
-    "きょうのニュース",
-    "auto",
-    null,
-    ["web"],
-    {},
-    "ja-JP"
-  );
+The Agent Skills live under .agents/skills. Both have the standard SKILL.md
+YAML frontmatter for agent discovery; no external MCP connection is required
+just to read them.
 
-  for await (const chunk of gen) {
-    // チャンクを逐次処理
-    console.log(chunk);
-  }
-}
+## Development and limitations / 開発・制限事項
 
-main().catch(console.error);
-```
-
-## Concrete code examples (English)
-
-Non-streaming example (see `sample/index.ts`):
-
-```ts
-import { PerplexityClient } from "@ptt/perplexity";
-
-async function main() {
-  const cli = new PerplexityClient();
-  // Non-streaming: get final aggregated response
-  const result = await cli.search(
-    "today news",
-    "pro",
-    "claude37sonnetthinking",
-    ["web", "social"],
-    {},
-    "en-US"
-  );
-
-  console.log("blocks length:", result.blocks?.length ?? 0);
-  for (const block of result.blocks ?? []) {
-    console.log(block.intended_usage, block);
-  }
-}
-
-main().catch(console.error);
-```
-
-Streaming example (see `sample/stream.ts`):
-
-```ts
-import { PerplexityClient } from "@ptt/perplexity";
-
-async function main() {
-  const cli = new PerplexityClient();
-  const gen = await cli.asyncSearch(
-    "today news",
-    "auto",
-    null,
-    ["web"],
-    {},
-    "en-US"
-  );
-
-  for await (const chunk of gen) {
-    console.log(chunk);
-  }
-}
-
-main().catch(console.error);
-```
-
-# Perplexity Bun / TypeScript クライアント
-
-このリポジトリは Perplexity.ai の公開 SSE エンドポイントを扱う、軽量な TypeScript クライアント実装です。
-主に Bun ランタイムでの利用を想定していますが、Node でも動作します。
-
-## 主要なポイント
-
-- SSE（Server-Sent Events）を受け取りパースするユーティリティを含みます。
-- 同期スタイルの `PerplexityClient` と、非同期初期化用の `PerplexityAsyncClient`（`src/perplexity_async.ts`）を提供します。
-
-## 使い方（ざっくり）
-
-1. 依存関係をインストール（プロジェクトに package.json がある想定）:
-
-```bash
-# Bun を使う場合
+~~~bash
 bun install
+bun test
+bun run build
+bun run sample/models.ts
+~~~
 
-# あるいは npm を使う場合
-npm install
-```
+- Network endpoints are **unofficial** and may change or produce Cloudflare 403.
+- Existing browser login helpers are experimental. Do not share credentials.
+- Cookie presence is not proof of Pro/Max; the client does not validate your
+  actual account tier, quota, or entitlement to any model.
+- Do not use temporary accounts to bypass quotas or security checks.
+- A bundled snapshot may become outdated; validate live results when possible.
+- The project is provided as-is and is not affiliated with Perplexity.
 
-2. サンプル実行（Bun 推奨）:
+## Package
 
-```bash
-# 直接サンプルを実行する例（Bun）
-bun run sample/index.ts
-
-# または事前にビルドして Node で実行する例
-npm run build
-node ./dist/sample/index.js
-```
-
-※ このリポジトリには `sample/` にサンプルスクリプトが含まれています（`sample/index.ts`, `sample/stream.ts`, `sample/followup.ts`, `sample/probe_models.ts`）。
-
-## 主要ファイル
-
-- `src/perplexity.ts` - 基本クライアント（SSE パース等）
-- `src/perplexity_async.ts` - 非同期初期化ラッパー
-- `src/labs.ts` - Labs（Socket.IO 等）向けクライアント
-- `src/emailnator.ts` - 一時メール取得ユーティリティ
-- `src/driver.ts` - ブラウザ自動化用スタブ
-- `src/search_helpers.ts`, `src/types.ts` - ユーティリティと型定義
-
-## 注意事項
-
-- デフォルトでは匿名（未認証）で公開エンドポイントにアクセスします。実運用ではクッキーやトークンによる認証を適切に設定してください。
-- ネットワークアクセスが必要です（Perplexity の API および関連リソース）。
-- SSE のストリーミングは途中で中断されることがあるため、アプリ側で再接続や部分受信のハンドリングを用意してください。
-
-## 開発／品質ゲート
-
-- 型定義は `src/types.ts` にまとめられています。変更時は型チェックを推奨します。
-- 変更を加えたらビルドと簡単なサンプル実行で動作確認してください。
-
-## ライセンス
-
-MIT
-
----
+- JSR name: @ptt/perplexity
+- package.json name: @potetotown/perplexity
+- License declaration: MIT

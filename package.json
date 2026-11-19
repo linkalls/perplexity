@@ -16,11 +16,17 @@
     "url": "https://github.com/linkalls/perplexity.git"
   },
   "scripts": {
-    "sample": "bun --enable-source-maps ./sample/index.js",
+    "sample": "bun run sample/index.ts",
     "build": "tsc -p .",
-    "prepare": "echo 'No build required for JSR publication (TypeScript source published)'"
+    "prepare": "echo 'No build required for JSR publication (TypeScript source published)'",
+    "test": "bun test",
+    "typecheck": "tsc -p . --noEmit"
   },
   "dependencies": {
     "patchright": "^1.55.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^5.9.3"
   }
 }

@@ -22,3 +22,5 @@ export default {
     Emailnator,
     Driver,
 };
+// Dynamic model registry with plan metadata and friendly-name resolution.
+export { listModelCatalog, resolveModelPreference, isModelConfigResponse, normalizeModelName, } from "./model_catalog";

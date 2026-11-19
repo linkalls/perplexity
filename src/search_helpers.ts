@@ -1,5 +1,8 @@
 // Shared helpers extracted from perplexity client to keep implementation small
 import type { PerplexityChunk, Models } from "./types";
+import { MODEL_CONFIG_SNAPSHOT } from "./model_config_snapshot";
+import { resolveModelPreference } from "./model_catalog";
+import type { ModelConfigResponse } from "./model_catalog";
 
 /**
  * cryptoRandomUuid
@@ -49,7 +52,7 @@ export function ensureSearchArgs(
 ): void {
   if (!["auto", "pro", "reasoning", "deep research"].includes(mode))
     throw new Error("Invalid search mode.");
-  if (!sources.every((s: string) => ["web", "scholar", "social"].includes(s)))
+  if (!sources.every((s: string) => ["web", "scholar", "social", "finance"].includes(s)))
     throw new Error("Invalid sources.");
   if (
     (mode === "pro" || mode === "reasoning" || mode === "deep research") &&
@@ -179,81 +182,38 @@ export async function uploadFiles(
  * The returned object is used by `computeModelPreference` to resolve a
  * canonical model id from a requested mode and (optional) model name.
  */
-export function buildModelPrefMap(): any {
-  // Expanded mapping based on observed accepted/displayed model names from probing.
-  // Normalization in computeModelPreference will also help match many variants.
-  return {
+export function buildModelPrefMap(
+  config: ModelConfigResponse = MODEL_CONFIG_SNAPSHOT
+): Record<string, Record<string, string>> {
+  // Compatibility helper: source aliases and IDs from the supplied model
+  // registry. See listModelCatalog() for plan and UI-selectable information.
+  const map: Record<string, Record<string, string>> = {
     auto: { __default: "turbo" },
-    pro: {
-      __default: "pplx_pro",
-      sonar: "experimental",
-      experimental: "experimental",
-      gpt5: "gpt5",
-      gpt5_nano: "gpt5_nano",
-      gpt45: "gpt45",
-      claude_sonnet_4_0: "claude2",
-      claude37sonnetthinking: "claude37sonnetthinking",
-      claude45sonnetthinking: "claude45sonnetthinking",
-      claude45: "claude45",
-      o3mini: "o3mini",
-      gemini25pro: "Gemini25Pro",
-      grok: "grok",
-    },
-    reasoning: {
-      __default: "pplx_reasoning",
-      gemini25pro: "Gemini25Pro",
-      gpt5: "gpt5",
-      o3mini: "o3mini",
-      claude37sonnetthinking: "claude37sonnetthinking",
-    },
+    pro: { __default: "pplx_pro" },
+    reasoning: { __default: "pplx_reasoning" },
     "deep research": { __default: "pplx_alpha" },
   };
+  for (const [id, info] of Object.entries(config.models)) {
+    if (info.mode === "search") {
+      map.pro[id] = id;
+      map.reasoning[id] = id;
+    } else if (info.mode === "research") {
+      map["deep research"][id] = id;
+    }
+  }
+  return map;
 }
 
 /**
- * computeModelPreference(mode, model)
- *
- * Normalizes and resolves the desired model for a given mode. Returns a
- * canonical model identifier or the mode default when no explicit match is
- * found.
- */
-/**
- * Compute the canonical model identifier for the given mode and model.
- *
- * If `model` is null the mode's default will be returned. The function
- * performs normalization of keys and values to match common caller inputs.
+ * Resolve a friendly label, legacy alias, or canonical model ID.
+ * Unknown explicit model names throw instead of silently changing models.
  */
 export function computeModelPreference(
   mode: string,
-  model: Models | null
-): string | undefined {
-  const map = buildModelPrefMap();
-  const byMode = map[mode];
-  if (!byMode) return undefined;
-  if (!model) return byMode["__default"];
-
-  // direct key match
-  if (Object.prototype.hasOwnProperty.call(byMode, model as any))
-    return byMode[model as any];
-
-  const normalize = (s: any) =>
-    String(s || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-  const mnorm = normalize(model);
-
-  // try normalized key match
-  for (const k of Object.keys(byMode)) {
-    if (normalize(k) === mnorm) return byMode[k];
-  }
-
-  // try matching against normalized values (in case caller passes canonical value)
-  for (const k of Object.keys(byMode)) {
-    const v = byMode[k];
-    if (normalize(v) === mnorm) return v;
-  }
-
-  return byMode["__default"];
+  model: Models | null,
+  config: ModelConfigResponse = MODEL_CONFIG_SNAPSHOT
+): string {
+  return resolveModelPreference(mode, model, config);
 }
 
 /**
@@ -353,9 +313,10 @@ export function buildSearchJsonBody(
   follow_up: any,
   incognito: boolean,
   language: string,
-  sources: Array<string>
+  sources: Array<string>,
+  modelConfig: ModelConfigResponse = MODEL_CONFIG_SNAPSHOT
 ): any {
-  const model_preference = computeModelPreference(mode, model);
+  const model_preference = computeModelPreference(mode, model, modelConfig);
   return {
     query_str: query,
     params: {

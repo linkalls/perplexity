@@ -1,5 +1,7 @@
 import Driver from "./driver";
-import { ensureSearchArgs, uploadFiles, buildSearchJsonBody, postSearch, buildModelPrefMap, } from "./search_helpers";
+import { ensureSearchArgs, uploadFiles, buildSearchJsonBody, postSearch, } from "./search_helpers";
+import { MODEL_CONFIG_SNAPSHOT } from "./model_config_snapshot";
+import { isModelConfigResponse, listModelCatalog } from "./model_catalog";
 /**
  * PerplexityClient
  *
@@ -25,6 +27,9 @@ export class PerplexityClient {
     own;
     copilot;
     file_upload;
+    /** Bundled fallback until a validated live model configuration is loaded. */
+    modelConfig = MODEL_CONFIG_SNAPSHOT;
+    modelConfigSource = "snapshot";
     signin_regex = /"(https:\/\/www\.perplexity\.ai\/api\/auth\/callback\/email\?callbackUrl=.*?)"/;
     constructor(cookies = {}) {
         this.cookies = cookies;
@@ -61,7 +66,7 @@ export class PerplexityClient {
         // basic validation (same as in search)
         ensureSearchArgs(this, mode, sources, files);
         const uploaded_files = await uploadFiles(this, files);
-        const jsonBody = buildSearchJsonBody(this, query, mode, model, uploaded_files, follow_up, incognito, language, sources);
+        const jsonBody = buildSearchJsonBody(this, query, mode, model, uploaded_files, follow_up, incognito, language, sources, this.modelConfig);
         const res = await postSearch(this, jsonBody);
         // wrap the low-level sseStream so callers receive chunks and also get
         // an aggregated PerplexityResponse as the generator's return value.
@@ -433,7 +438,7 @@ export class PerplexityClient {
         // basic validation
         ensureSearchArgs(this, mode, sources, files);
         const uploaded_files = await uploadFiles(this, files);
-        const jsonBody = buildSearchJsonBody(this, query, mode, model, uploaded_files, follow_up, incognito, language, sources);
+        const jsonBody = buildSearchJsonBody(this, query, mode, model, uploaded_files, follow_up, incognito, language, sources, this.modelConfig);
         // console.log(jsonBody) //*大事
         const res = await postSearch(this, jsonBody);
         // non-stream: collect all chunks, merge them, and return an aggregated final response
@@ -814,80 +819,50 @@ export class PerplexityClient {
         return true;
     }
     /**
-     * Attempt to retrieve available models. Strategy:
-     * 1) try known HTTP endpoints
-     * 2) try cookie `pplx.search-models-v4` if present
-     * 3) try /api/auth/session body
-     * 4) fallback to internal model map
+     * Refresh the catalog from Perplexity's undocumented web endpoints.
+     * A failed request or Cloudflare HTML challenge never changes the catalog.
+     * When refresh fails, return the bundled snapshot or last successful data.
      */
     async getModels() {
         const candidates = [
             "/rest/models/config?config_schema=v1&version=2.18&source=default",
-            "/api/search/models",
-            "/rest/models",
-            "/api/models",
-            "/api/public/models",
+            "/rest/models/config/v2?version=2.18&source=default",
         ];
         for (const path of candidates) {
             try {
                 const resp = await fetch(this.base + path, {
                     headers: this.buildHeaders({ accept: "application/json" }),
                 });
-                if (resp.ok) {
-                    const ct = resp.headers.get("content-type") || "";
-                    if (ct.includes("application/json")) {
-                        try {
-                            return await resp.json();
-                        }
-                        catch (e) {
-                            /* ignore parse error */
-                        }
-                    }
+                if (!resp.ok)
+                    continue;
+                const contentType = resp.headers.get("content-type") ?? "";
+                if (!contentType.includes("application/json"))
+                    continue;
+                const body = await resp.json();
+                if (isModelConfigResponse(body)) {
+                    this.modelConfig = body;
+                    this.modelConfigSource = "live";
+                    return body;
                 }
             }
-            catch (e) {
-                // ignore and try next
+            catch {
+                // Continue to the next known endpoint; the site may be challenge-gated.
             }
         }
-        // try cookie-based model hint
-        try {
-            const cookieVal = (this.cookies &&
-                (this.cookies["pplx.search-models-v4"] ||
-                    this.cookies["pplx.search-models-v3"]));
-            if (cookieVal) {
-                try {
-                    const decoded = decodeURIComponent(String(cookieVal));
-                    const parsed = JSON.parse(decoded.startsWith("{")
-                        ? decoded
-                        : decoded.replace(/^pplx\.search-models-v\d+=/, ""));
-                    return parsed;
-                }
-                catch (e) {
-                    // ignore
-                }
-            }
-        }
-        catch (e) {
-            // ignore
-        }
-        // try session endpoint for hints
-        try {
-            const s = await fetch(this.base + "/api/auth/session", {
-                headers: this.buildHeaders({ accept: "application/json" }),
-            });
-            if (s.ok) {
-                try {
-                    const body = await s.json();
-                    // heuristics: search for keys that might contain model info
-                    if (body &&
-                        (body.search_models || body["pplx.search-models-v4"] || body.user))
-                        return body;
-                }
-                catch (e) { }
-            }
-        }
-        catch (e) { }
-        // use shared model preference map
-        return buildModelPrefMap();
+        return this.modelConfig;
+    }
+    /**
+     * List all known model IDs or filter by mode/plan.
+     *
+     * subscriptionTier is inferred *only* from 'config' UI selection entries,
+     * not from registration in 'models'. Null means unknown. Pro/Max labels are
+     * plan requirements from the captured configuration, not an access check.
+     */
+    getModelCatalog(filter = {}) {
+        return listModelCatalog(this.modelConfig, filter);
+    }
+    /** Get a single model's metadata, or undefined when the ID is unknown. */
+    getModelInfo(id) {
+        return this.getModelCatalog().find((model) => model.id === id);
     }
 }

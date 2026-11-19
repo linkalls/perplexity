@@ -12,23 +12,8 @@ export type ID = string;
  *
  * Union of supported model names observed on the platform.
  */
-export type Models =
-  | "sonar"
-  | "experimental"
-  | "gpt5"
-  | "gpt5_nano"
-  | "gpt45"
-  | "claude_sonnet_4_0"
-  | "claude37sonnetthinking"
-  | "claude45sonnetthinking"
-  | "claude45"
-  | "o3mini"
-  | "gemini25pro"
-  | "grok"
-  | "pplx_pro"
-  | "pplx_reasoning"
-  | "pplx_alpha"
-  | "turbo";
+/** Model IDs from the bundled config, plus labels and future IDs. */
+export type Models = string;
 
 /**
  * ClassifierResults
